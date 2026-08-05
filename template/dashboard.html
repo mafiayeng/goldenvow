@@ -1,9 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
     <h2 class="golden-text">👋 Welcome, {{ admin.username }}</h2>
-    <a href="{{ url_for('create_event') }}" class="btn btn-gold"><i class="bi bi-plus-circle"></i> New Event</a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('contact_super') }}" class="btn btn-outline-gold">
+            <i class="bi bi-envelope"></i> Contact Super Admin
+        </a>
+        <a href="{{ url_for('create_event') }}" class="btn btn-gold">
+            <i class="bi bi-plus-circle"></i> New Event
+        </a>
+    </div>
+</div>
+
+<!-- Quick Tips -->
+<div class="glass-card p-3 mb-4">
+    <h5 class="golden-text"><i class="bi bi-lightbulb"></i> Quick Tips</h5>
+    <ul class="text-muted-light">
+        <li>🔑 <strong>Account Name:</strong> Always set the exact name contributors will see when sending money. The system will use this for verification.</li>
+        <li>📸 <strong>Payment Proof:</strong> Contributors upload screenshots. You review and click <strong>Approve</strong>.</li>
+        <li>📖 <strong>Full Guide:</strong> Click <a href="{{ url_for('help_page') }}" class="golden-text">Help</a> for detailed instructions.</li>
+        <li>⚠️ <strong>Event Locking:</strong> If fees reach KES 50+, your event will lock after 3 days if not paid.</li>
+    </ul>
 </div>
 
 <!-- Stats Cards -->
@@ -11,25 +29,25 @@
     <div class="col-md-3 col-6">
         <div class="glass-card p-3 text-center">
             <h3 class="golden-text">{{ events.total }}</h3>
-            <small>Events</small>
+            <small class="text-muted-light">Events</small>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass-card p-3 text-center">
             <h3 class="golden-text">KES {{ total_raised|round(2)|int }}</h3>
-            <small>Total Raised</small>
+            <small class="text-muted-light">Total Raised</small>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass-card p-3 text-center">
             <h3 class="golden-text">{{ pending_contributions }}</h3>
-            <small>Pending Approvals</small>
+            <small class="text-muted-light">Pending Approvals</small>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">KES {{ get_admin_total_fees(admin.id)|round(2) }}</h3>
-            <small>Your Fees Earned</small>
+            <h3 class="golden-text">{{ admin.referral_count }}</h3>
+            <small class="text-muted-light">Referrals</small>
         </div>
     </div>
 </div>
@@ -49,6 +67,9 @@
                 <div class="progress-bar progress-bar-gold" style="width:{{ (get_event_total_contributions(event.id)/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;"></div>
             </div>
             <small class="text-muted-light">Status: {{ 'Active' if event.is_active and not event.disabled else 'Inactive/Locked' }}</small>
+            {% if event.account_name %}
+            <small class="d-block text-muted-light">Account: {{ event.account_name }}</small>
+            {% endif %}
             <div class="mt-2 d-flex flex-wrap gap-1">
                 <a href="{{ url_for('event_landing', token=event.token) }}" class="btn btn-sm btn-outline-gold">View</a>
                 <a href="{{ url_for('edit_event', token=event.token) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
@@ -76,44 +97,7 @@
 </nav>
 {% endif %}
 
-<!-- Withdrawal Request Modal (quick link) -->
-<div class="mt-4 text-center">
-    <button class="btn btn-outline-gold" data-bs-toggle="modal" data-bs-target="#withdrawalModal">
-        <i class="bi bi-arrow-up-circle"></i> Request Withdrawal
-    </button>
-</div>
-
-<!-- Withdrawal Modal -->
-<div class="modal fade" id="withdrawalModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content glass-card">
-            <div class="modal-header border-0">
-                <h5 class="modal-title golden-text">Request Withdrawal</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="{{ url_for('request_withdrawal') }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Amount (KES)</label>
-                        <input type="number" name="amount" class="form-control bg-dark text-light" step="0.01" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Phone Number</label>
-                        <input type="tel" name="phone" class="form-control bg-dark text-light" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Method</label>
-                        <select name="method" class="form-select bg-dark text-light">
-                            <option value="mpesa">M-Pesa</option>
-                            <option value="bank">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer border-0">
-                    <button type="submit" class="btn btn-gold">Submit Request</button>
-                </div>
-            </form>
-        </div>
-    </div>
+<div class="mt-3 text-center">
+    <a href="{{ url_for('help_page') }}" class="text-muted-light"><i class="bi bi-question-circle"></i> Need help? Read the Admin Guide</a>
 </div>
 {% endblock %}
