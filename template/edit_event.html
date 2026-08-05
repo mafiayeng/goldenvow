@@ -4,7 +4,6 @@
 <h2 class="golden-text">✏️ Edit: {{ event.title }}</h2>
 <div class="glass-card p-4">
     <form method="POST" class="row g-3">
-        <!-- Event Type -->
         <div class="col-md-6">
             <label class="form-label">Event Type</label>
             <select name="event_type" class="form-select bg-dark text-light">
@@ -16,52 +15,35 @@
                 <option value="other" {% if event.event_type == 'other' %}selected{% endif %}>✦ Other</option>
             </select>
         </div>
-        
-        <!-- Title -->
         <div class="col-md-6">
-            <label class="form-label">Event Title</label>
+            <label class="form-label">Event Title <span class="text-danger">*</span></label>
             <input type="text" name="title" class="form-control bg-dark text-light" value="{{ event.title }}" required>
         </div>
-        
-        <!-- Description -->
         <div class="col-12">
             <label class="form-label">Description</label>
             <textarea name="description" class="form-control bg-dark text-light" rows="3">{{ event.description or '' }}</textarea>
         </div>
-        
-        <!-- Target Amount -->
         <div class="col-md-4">
             <label class="form-label">Target Amount (KES)</label>
             <input type="number" name="target_amount" class="form-control bg-dark text-light" step="0.01" value="{{ event.target_amount }}" required>
         </div>
-        
-        <!-- Event Date -->
         <div class="col-md-4">
             <label class="form-label">Event Date</label>
             <input type="datetime-local" name="event_date" class="form-control bg-dark text-light" value="{{ event.event_date.strftime('%Y-%m-%dT%H:%M') }}" required>
         </div>
-        
-        <!-- Deadline -->
         <div class="col-md-4">
             <label class="form-label">Deadline</label>
             <input type="datetime-local" name="deadline" class="form-control bg-dark text-light" value="{{ event.deadline.strftime('%Y-%m-%dT%H:%M') }}" required>
         </div>
-        
-        <!-- Picture URL -->
         <div class="col-12">
             <label class="form-label">Picture URL</label>
             <input type="url" name="picture_url" class="form-control bg-dark text-light" value="{{ event.picture_url or '' }}">
         </div>
-        
-        <!-- Background Image -->
         <div class="col-12">
             <label class="form-label">Background Image URL</label>
             <input type="url" name="background_image_url" class="form-control bg-dark text-light" value="{{ event.background_image_url or '' }}">
         </div>
-        
         <h5 class="golden-text mt-3">💳 Payment Details</h5>
-
-        <!-- ⭐ ACCOUNT NAME - MANDATORY ⭐ -->
         <div class="col-md-12">
             <label class="form-label">Account Name (M-Pesa/Bank Account Holder) <span class="text-danger">*</span></label>
             <input type="text" name="account_name" class="form-control bg-dark text-light" value="{{ event.account_name or '' }}" placeholder="e.g. Alex Kiprop" required>
@@ -70,8 +52,6 @@
                 This name is displayed publicly and used for payment verification.
             </div>
         </div>
-        
-        <!-- Payment Methods -->
         <div class="col-md-3">
             <label class="form-label">Paybill</label>
             <input type="text" name="paybill" class="form-control bg-dark text-light" value="{{ event.paybill or '' }}">
@@ -88,8 +68,6 @@
             <label class="form-label">WhatsApp Contact</label>
             <input type="text" name="whatsapp_contact" class="form-control bg-dark text-light" value="{{ event.whatsapp_contact or '' }}">
         </div>
-        
-        <!-- Bank Details -->
         <div class="col-md-4">
             <label class="form-label">Bank Name</label>
             <input type="text" name="bank_name" class="form-control bg-dark text-light" value="{{ event.bank_name or '' }}">
@@ -102,14 +80,10 @@
             <label class="form-label">Bank Account Number</label>
             <input type="text" name="bank_account_number" class="form-control bg-dark text-light" value="{{ event.bank_account_number or '' }}">
         </div>
-        
-        <!-- Payment Instructions -->
         <div class="col-12">
             <label class="form-label">Payment Instructions</label>
             <textarea name="payment_instructions" class="form-control bg-dark text-light" rows="2">{{ event.payment_instructions or '' }}</textarea>
         </div>
-        
-        <!-- Grace Period -->
         <div class="col-md-6">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="has_grace_period" value="1" {% if event.has_grace_period %}checked{% endif %}>
@@ -120,8 +94,6 @@
             <label class="form-label">Grace Period (days)</label>
             <input type="number" name="grace_period" class="form-control bg-dark text-light" value="{{ event.grace_period or 0 }}">
         </div>
-        
-        <!-- Submit -->
         <div class="col-12">
             <button type="submit" class="btn btn-gold">💾 Update Event</button>
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
