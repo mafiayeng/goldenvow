@@ -1,4 +1,4 @@
-# ==================== app.py – FINAL WITH ALL FEATURES ====================
+# ==================== app.py – COMPLETE FINAL VERSION ====================
 import os, uuid, random, string, io, secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
@@ -21,7 +21,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # ---------- CONFIG ----------
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
-SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
+SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '0737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'support@goldenvow.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET', 'changeme_super_secret_123')
 
@@ -178,15 +178,27 @@ class Setting(db.Model):
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=False)
 
+class FeatureRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    contributor_id = db.Column(db.Integer, db.ForeignKey('contributor.id'), nullable=True)
+    contributor_name = db.Column(db.String(150), nullable=False)
+    contributor_email = db.Column(db.String(100), nullable=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    admin_response = db.Column(db.Text, nullable=True)
+    votes = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # ---------- CREATE TABLES & MIGRATIONS ----------
 with app.app_context():
     db.create_all()
-    # Ensure settings
     for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
         if not Setting.query.filter_by(key=key).first():
             db.session.add(Setting(key=key, value=default))
             db.session.commit()
-    # Add new columns if missing
     try:
         inspector = inspect(db.engine)
         cols = [c['name'] for c in inspector.get_columns('contributor')]
@@ -234,7 +246,6 @@ def create_notification(admin_id, message, type='info', event_id=None, contribut
 def get_unread_notifications(admin_id):
     return Notification.query.filter_by(admin_id=admin_id, is_read=False).count()
 
-# ---------- FEE WITH REFERRAL TIERS ----------
 def get_fee_percentage(admin_id):
     admin = Admin.query.get(admin_id)
     if not admin:
@@ -296,12 +307,12 @@ def is_fee_overdue(event):
 
 def get_daily_note(event_type, day):
     notes = {
-        'dowry': ["🐂 Love unites two families...", "Every step brings them closer..."],
-        'burial': ["🕊️ In loving memory...", "Together we heal..."],
-        'medical': ["❤️ Hope and healing...", "Your support saves lives..."],
-        'education': ["🎓 Building futures...", "Knowledge is power..."],
-        'harambee': ["🤝 Community strength...", "Together we achieve more..."],
-        'other': ["✨ Great things happen...", "Your kindness matters..."]
+        'dowry': ["🐂 Love unites two families...", "Every step brings them closer...", "A journey of love begins...", "Two families become one..."],
+        'burial': ["🕊️ In loving memory...", "Together we heal...", "A life remembered lives on...", "We mourn together..."],
+        'medical': ["❤️ Hope and healing...", "Your support saves lives...", "Strength comes from community...", "Every shilling brings hope..."],
+        'education': ["🎓 Building futures...", "Knowledge is power...", "Every child deserves a chance...", "Education transforms lives..."],
+        'harambee': ["🤝 Community strength...", "Together we achieve more...", "United we stand...", "Community is the foundation..."],
+        'other': ["✨ Great things happen...", "Your kindness matters...", "Together we make a difference...", "Every contribution counts..."]
     }
     list = notes.get(event_type, notes['other'])
     return list[(day - 1) % len(list)]
@@ -410,7 +421,6 @@ def handle_private_message(data):
     db.session.add(pm)
     db.session.commit()
     if sender_type == 'admin':
-        # notify contributor? We'll rely on chat UI polling.
         pass
     else:
         admin = Admin.query.get(conv.admin_id)
@@ -429,6 +439,14 @@ def handle_join_conversation(data):
     conv_id = data.get('conversation_id')
     room = f"conversation_{conv_id}"
     join_room(room)
+
+# ---------- EMIT HELPER ----------
+def emit_contribution_update(event_token):
+    event = Event.query.filter_by(token=event_token).first()
+    if event:
+        total = get_event_total_contributions(event.id)
+        fee = get_event_total_fee(event.id)
+        socketio.emit('total_updated', {'total': total, 'fee': fee}, room=event_token)
 
 # ---------- ROUTES ----------
 @app.route('/force_maintenance_off')
@@ -473,7 +491,6 @@ def register():
             referral_code = generate_referral_code()
         admin = Admin(username=username, password_hash=hash_password(password), email=email, phone=phone,
                       referral_code=referral_code, is_super_admin=False)
-        # Super admin secret
         if super_secret == SUPER_ADMIN_SECRET:
             admin.is_super_admin = True
             flash('You are now the Super Admin!', 'success')
@@ -482,7 +499,6 @@ def register():
             flash('First user registered as Super Admin.', 'success')
         db.session.add(admin)
         db.session.commit()
-        # Handle referral
         if ref_code:
             referrer = Admin.query.filter_by(referral_code=ref_code).first()
             if referrer:
@@ -519,13 +535,40 @@ def logout():
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    # (keep existing – omitted for brevity, copy from earlier)
-    pass
+    if request.method == 'POST':
+        email = request.form.get('email')
+        admin = Admin.query.filter_by(email=email).first()
+        if not admin:
+            flash('No account with that email.', 'error')
+            return render_template('forgot_password.html')
+        token = secrets.token_urlsafe(32)
+        expires = datetime.utcnow() + timedelta(hours=1)
+        reset = PasswordReset(admin_id=admin.id, token=token, expires_at=expires)
+        db.session.add(reset)
+        db.session.commit()
+        flash('Password reset link sent to your email.', 'success')
+        return redirect(url_for('login'))
+    return render_template('forgot_password.html')
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    # (keep existing)
-    pass
+    reset = PasswordReset.query.filter_by(token=token, used=False).first()
+    if not reset or reset.expires_at < datetime.utcnow():
+        flash('Invalid or expired reset link.', 'error')
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm = request.form.get('confirm')
+        if password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('reset_password.html', token=token)
+        admin = Admin.query.get(reset.admin_id)
+        admin.password_hash = hash_password(password)
+        reset.used = True
+        db.session.commit()
+        flash('Password updated. Please login.', 'success')
+        return redirect(url_for('login'))
+    return render_template('reset_password.html', token=token)
 
 # ---------- DASHBOARDS ----------
 @app.route('/')
@@ -564,11 +607,14 @@ def super_dashboard():
     total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
     pending_withdrawals = Withdrawal.query.filter_by(status='pending').count()
     locked_events = Event.query.filter(Event.disabled == True).count()
+    pending_feature_requests = FeatureRequest.query.filter_by(status='pending').count()
+    contact_messages_count = ContactMessage.query.filter_by(is_read=False).count()
     admins = Admin.query.all()
     return render_template('super_dashboard.html', admin=admin, total_events=total_events,
                            total_contributions=total_contributions, total_fees=total_fees,
                            pending_withdrawals=pending_withdrawals, locked_events=locked_events,
-                           admins=admins)
+                           admins=admins, pending_feature_requests=pending_feature_requests,
+                           contact_messages_count=contact_messages_count)
 
 @app.route('/manage-admins')
 def manage_admins():
@@ -746,7 +792,7 @@ def lock_event_page(token):
     flash('Lock status updated.', 'success')
     return redirect(url_for('dashboard'))
 
-# ---------- FEE PAYMENT (Super Admin marks paid) ----------
+# ---------- FEE PAYMENT ----------
 @app.route('/events/<token>/pay-fee', methods=['POST'])
 def pay_event_fee(token):
     if not is_admin_logged_in():
@@ -777,7 +823,7 @@ def request_unlock(token):
     flash('Request sent to super admin.', 'success')
     return redirect(url_for('manage_contributors', token=event.token))
 
-# ---------- CONTRIBUTORS & APPROVALS ----------
+# ---------- CONTRIBUTORS ----------
 @app.route('/events/<token>/contributors')
 def manage_contributors(token):
     if not is_admin_logged_in():
@@ -917,6 +963,31 @@ def submit_payment_proof(token):
     create_notification(admin.id, f'New payment proof from {contrib.name}.', 'info', event.id, contrib.id)
     return redirect(url_for('contributor_view', token=contrib.token))
 
+@app.route('/contributor/<token>/receipt')
+def contributor_receipt(token):
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    if contrib.status != 'approved' or not contrib.completed_at:
+        flash('Only approved contributions have receipts.', 'error')
+        return redirect(url_for('contributor_view', token=token))
+    if (datetime.utcnow() - contrib.completed_at).days < 7:
+        flash('Receipt available after 7 days.', 'error')
+        return redirect(url_for('contributor_view', token=token))
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, height - 50, "CONTRIBUTION RECEIPT")
+    p.setFont("Helvetica", 12)
+    p.drawString(50, height - 80, f"Name: {contrib.name}")
+    p.drawString(50, height - 100, f"Phone: {contrib.phone}")
+    p.drawString(50, height - 120, f"Amount: KES {contrib.paid_amount:,.2f}")
+    p.drawString(50, height - 140, f"Event: {contrib.event.title}")
+    p.drawString(50, height - 160, f"Date: {contrib.completed_at.strftime('%Y-%m-%d %H:%M')}")
+    p.drawString(50, height - 180, f"Receipt #: {contrib.token}")
+    p.save()
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=f"receipt_{contrib.token}.pdf", mimetype='application/pdf')
+
 # ---------- PRIVATE CHAT ----------
 @app.route('/chat/admin')
 def admin_chat_list():
@@ -958,33 +1029,125 @@ def contributor_chat(token):
     db.session.commit()
     return render_template('chat_contributor.html', conv=conv, messages=messages, contrib=contrib, event=event)
 
-# ---------- RECEIPT ----------
-@app.route('/contributor/<token>/receipt')
-def contributor_receipt(token):
-    contrib = Contributor.query.filter_by(token=token).first_or_404()
-    if contrib.status != 'approved' or not contrib.completed_at:
-        flash('Only approved contributions have receipts.', 'error')
-        return redirect(url_for('contributor_view', token=token))
-    if (datetime.utcnow() - contrib.completed_at).days < 7:
-        flash('Receipt available after 7 days.', 'error')
-        return redirect(url_for('contributor_view', token=token))
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(50, height - 50, "CONTRIBUTION RECEIPT")
-    p.setFont("Helvetica", 12)
-    p.drawString(50, height - 80, f"Name: {contrib.name}")
-    p.drawString(50, height - 100, f"Phone: {contrib.phone}")
-    p.drawString(50, height - 120, f"Amount: KES {contrib.paid_amount:,.2f}")
-    p.drawString(50, height - 140, f"Event: {contrib.event.title}")
-    p.drawString(50, height - 160, f"Date: {contrib.completed_at.strftime('%Y-%m-%d %H:%M')}")
-    p.drawString(50, height - 180, f"Receipt #: {contrib.token}")
-    p.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"receipt_{contrib.token}.pdf", mimetype='application/pdf')
+# ---------- FEATURE REQUESTS ----------
+@app.route('/feature-request', methods=['GET', 'POST'])
+@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])
+def submit_feature_request(event_token=None):
+    event = None
+    contributor_token = request.args.get('contributor_token')
+    contributor = None
+    if event_token:
+        event = Event.query.filter_by(token=event_token).first_or_404()
+    if contributor_token:
+        contributor = Contributor.query.filter_by(token=contributor_token).first()
+    contributor_name = request.args.get('name', '')
+    contributor_email = request.args.get('email', '')
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
+        title = request.form.get('title', '').strip()
+        description = request.form.get('description', '').strip()
+        event_token_post = request.form.get('event_token')
+        contributor_token_post = request.form.get('contributor_token')
+        if not name or not title or not description:
+            flash('Name, title, and description are required.', 'error')
+            return render_template('feature_request.html', event=event, contributor_name=name, contributor_email=email)
+        contributor_id = None
+        if contributor_token_post:
+            contrib = Contributor.query.filter_by(token=contributor_token_post).first()
+            if contrib:
+                contributor_id = contrib.id
+        event_id = None
+        if event_token_post:
+            ev = Event.query.filter_by(token=event_token_post).first()
+            if ev:
+                event_id = ev.id
+        feature = FeatureRequest(
+            event_id=event_id,
+            contributor_id=contributor_id,
+            contributor_name=name,
+            contributor_email=email,
+            title=title,
+            description=description,
+            status='pending'
+        )
+        db.session.add(feature)
+        db.session.commit()
+        super_admins = Admin.query.filter_by(is_super_admin=True).all()
+        for sa in super_admins:
+            create_notification(sa.id, f'💡 New feature request from {name}: {title}', 'feature_request', event_id, contributor_id)
+        flash('✅ Thank you! Your feature suggestion has been submitted.', 'success')
+        if event:
+            return redirect(url_for('event_landing', token=event.token))
+        return redirect(url_for('dashboard'))
+    return render_template('feature_request.html', event=event, contributor_name=contributor_name,
+                           contributor_email=contributor_email, contributor_token=contributor_token)
 
-# ---------- WITHDRAWALS (Super Admin only) ----------
+@app.route('/manage-feature-requests')
+def manage_feature_requests():
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if not admin.is_super_admin:
+        flash('Only Super Admin can manage feature requests.', 'error')
+        return redirect(url_for('dashboard'))
+    requests = FeatureRequest.query.order_by(desc(FeatureRequest.created_at)).all()
+    return render_template('manage_feature_requests.html', requests=requests)
+
+@app.route('/feature-request/<int:req_id>/update', methods=['POST'])
+def update_feature_request(req_id):
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if not admin.is_super_admin:
+        flash('Only Super Admin can update feature requests.', 'error')
+        return redirect(url_for('dashboard'))
+    req = FeatureRequest.query.get_or_404(req_id)
+    status = request.form.get('status')
+    response = request.form.get('response', '').strip()
+    if status in ['pending', 'reviewing', 'approved', 'declined']:
+        req.status = status
+        req.admin_response = response
+        req.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash(f'✅ Feature request updated to {status}.', 'success')
+    else:
+        flash('Invalid status.', 'error')
+    return redirect(url_for('manage_feature_requests'))
+
+# ---------- CONTACT SUPER ADMIN ----------
+@app.route('/contact-super', methods=['GET', 'POST'])
+def contact_super():
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if request.method == 'POST':
+        name = request.form.get('name', admin.username)
+        email = request.form.get('email', admin.email)
+        phone = request.form.get('phone', admin.phone or '')
+        subject = request.form.get('subject', '').strip()
+        message = request.form.get('message', '').strip()
+        if not subject or not message:
+            flash('Subject and message are required.', 'error')
+            return render_template('contact_super.html', admin=admin)
+        super_admins = Admin.query.filter_by(is_super_admin=True).all()
+        for sa in super_admins:
+            create_notification(sa.id, f'📩 New message from {name} (Admin): {subject}', 'info', None, None)
+            contact_msg = ContactMessage(
+                name=name,
+                email=email,
+                phone=phone,
+                subject=f'[Admin Message] {subject}',
+                message=f"From Admin: {name}\nEmail: {email}\nPhone: {phone}\n\n{message}",
+                is_read=False
+            )
+            db.session.add(contact_msg)
+        db.session.commit()
+        flash('✅ Your message has been sent to the Super Admin.', 'success')
+        return redirect(url_for('dashboard'))
+    return render_template('contact_super.html', admin=admin)
+
+# ---------- WITHDRAWALS ----------
 @app.route('/withdrawals')
 def withdrawals():
     if not is_admin_logged_in() or not get_admin().is_super_admin:
@@ -1100,7 +1263,7 @@ def mark_all_notifications_read():
     db.session.commit()
     return jsonify({'success': True})
 
-# ---------- SETTINGS (Super Admin) ----------
+# ---------- SETTINGS ----------
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     if not is_admin_logged_in() or not get_admin().is_super_admin:
@@ -1172,14 +1335,6 @@ def check_pending_contributions():
 scheduler = BackgroundScheduler()
 scheduler.add_job(check_pending_contributions, 'interval', hours=3)
 scheduler.start()
-
-# ---------- EMIT HELPER ----------
-def emit_contribution_update(event_token):
-    event = Event.query.filter_by(token=event_token).first()
-    if event:
-        total = get_event_total_contributions(event.id)
-        fee = get_event_total_fee(event.id)
-        socketio.emit('total_updated', {'total': total, 'fee': fee}, room=event_token)
 
 # ---------- MAIN ----------
 if __name__ == '__main__':
