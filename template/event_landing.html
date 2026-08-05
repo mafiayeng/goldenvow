@@ -18,10 +18,36 @@
     </div>
 </div>
 
+<!-- Contributor Login/Register Section -->
+<div class="glass-card p-3 mb-3">
+    {% if contributor %}
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <i class="bi bi-check-circle-fill golden-text"></i> 
+            Logged in as: <strong>{{ contributor.name }}</strong>
+            <span class="text-muted-light small">({{ contributor.username }})</span>
+        </div>
+        <a href="{{ url_for('contributor_logout') }}" class="btn btn-sm btn-outline-gold">Logout</a>
+    </div>
+    {% else %}
+    <div class="text-center">
+        <p class="text-muted-light">Have an account? Log in to contribute faster!</p>
+        <div class="d-flex justify-content-center gap-2">
+            <a href="{{ url_for('contributor_login', event_token=event.token) }}" class="btn btn-outline-gold">
+                <i class="bi bi-box-arrow-in-right"></i> Login
+            </a>
+            <a href="{{ url_for('contributor_register', event_token=event.token) }}" class="btn btn-gold">
+                <i class="bi bi-person-plus"></i> Register
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
 <!-- Daily Note -->
 <div class="alert glass-card text-center">{{ daily_note }}</div>
 
-<!-- ⭐ ACCOUNT NAME - PUBLIC ⭐ -->
+<!-- Payment Instructions -->
 <div class="glass-card p-3 mb-3">
     <h5 class="golden-text">💰 Payment Instructions</h5>
     {% if event.account_name %}
@@ -31,7 +57,6 @@
         <br><small class="text-muted-light">Please use this exact name when sending money.</small>
     </div>
     {% endif %}
-
     {{ event.payment_instructions or 'Contact the organiser for payment details.' }}
     {% if event.paybill %}<p><strong>Paybill:</strong> {{ event.paybill }}</p>{% endif %}
     {% if event.mpesa_number %}<p><strong>M-Pesa:</strong> {{ event.mpesa_number }}</p>{% endif %}
@@ -45,7 +70,7 @@
     <form method="POST" action="{{ url_for('submit_payment_proof', token=event.token) }}" enctype="multipart/form-data">
         <div class="mb-2">
             <label class="form-label">Your Name (as registered)</label>
-            <input type="text" name="contributor_name" class="form-control bg-dark text-light" value="{{ contributor_name }}" readonly>
+            <input type="text" name="contributor_name" class="form-control bg-dark text-light" value="{{ contributor.name if contributor else '' }}" readonly>
         </div>
         <div class="mb-2">
             <label class="form-label">Payment Screenshot</label>
@@ -68,7 +93,7 @@
         {% endfor %}
     </div>
     <form id="chatForm" class="d-flex mt-2">
-        <input type="text" id="chatName" class="form-control bg-dark text-light me-1" placeholder="Your name" style="max-width:150px;" value="Anonymous">
+        <input type="text" id="chatName" class="form-control bg-dark text-light me-1" placeholder="Your name" style="max-width:150px;" value="{{ contributor.name if contributor else 'Anonymous' }}">
         <input type="text" id="chatMessage" class="form-control bg-dark text-light me-1" placeholder="Message..." required>
         <button type="submit" class="btn btn-gold">Send</button>
     </form>
