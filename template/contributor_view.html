@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Contributor – {{ contrib.name }}{% endblock %}
+{% block content %}
+<div class="glass-card p-4">
+    <h2 class="golden-text">👤 {{ contrib.name }}</h2>
+    <p><strong>Phone:</strong> {{ contrib.phone }}</p>
+    <p><strong>Pledge:</strong> KES {{ contrib.pledge_amount|round(2) }}</p>
+    <p><strong>Fee:</strong> KES {{ contrib.fee_amount|round(2) }}</p>
+    <p><strong>Net Contribution:</strong> KES {{ contrib.net_contribution|round(2) }}</p>
+    <p><strong>Status:</strong>
+        <span class="badge bg-{{ 'success' if contrib.status == 'approved' else 'warning' if contrib.status == 'pending' else 'danger' }}">
+            {{ contrib.status|title }}
+        </span>
+    </p>
+    {% if contrib.status == 'declined' and contrib.decline_reason %}
+    <div class="alert alert-danger">
+        <strong>Declined Reason:</strong> {{ contrib.decline_reason }}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Submit Payment Proof -->
+<div class="glass-card p-4 mt-3">
+    <h5 class="golden-text">📎 Submit Payment Proof</h5>
+    <form method="POST" action="{{ url_for('submit_payment_proof', token=contrib.token) }}" enctype="multipart/form-data">
+        <div class="mb-2">
+            <label class="form-label">Screenshot (optional)</label>
+            <input type="file" name="screenshot" class="form-control bg-dark text-light" accept="image/*">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Text proof (transaction code, etc.)</label>
+            <textarea name="payment_proof_text" class="form-control bg-dark text-light" rows="2">{{ contrib.payment_proof_text or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-gold">Submit Proof</button>
+    </form>
+</div>
+
+<!-- Payment History -->
+<div class="glass-card p-4 mt-3">
+    <h5 class="golden-text">💳 Payment History</h5>
+    {% if show_payments and payments %}
+    <ul class="list-group list-group-flush bg-transparent">
+        {% for p in payments %}
+        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+            <span>KES {{ p.amount|round(2) }}</span>
+            <span class="text-muted-light">{{ p.date_paid.strftime('%Y-%m-%d %H:%M') }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% elif show_payments and not payments %}
+    <p class="text-muted-light">No payments recorded yet.</p>
+    {% else %}
+    <p class="text-muted-light">
+        <i class="bi bi-lock"></i> Payment history will be available after 7 days.
+        <br><small>Contact the event admin if you need it earlier.</small>
+    </p>
+    {% endif %}
+</div>
+
+<!-- Receipt Download -->
+{% if contrib.status == 'approved' and contrib.completed_at %}
+    {% if (now - contrib.completed_at).days >= 7 %}
+    <div class="glass-card p-4 mt-3 text-center">
+        <a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold">
+            <i class="bi bi-file-pdf"></i> Download Receipt (PDF)
+        </a>
+    </div>
+    {% else %}
+    <div class="glass-card p-4 mt-3 text-center text-muted-light">
+        <i class="bi bi-clock"></i> Receipt will be available after 7 days.
+        <br><small>Contact the event admin if you need it earlier.</small>
+    </div>
+    {% endif %}
+{% endif %}
+
+<!-- Chat with Admin -->
+<div class="glass-card p-4 mt-3 text-center">
+    <a href="{{ url_for('contributor_chat', token=contrib.token) }}" class="btn btn-outline-gold">
+        <i class="bi bi-chat-dots"></i> Chat with Admin
+    </a>
+</div>
+
+<div class="mt-3 text-center">
+    <a href="{{ url_for('manage_contributors', token=event.token) }}" class="text-muted-light">← Back to Contributors</a>
+</div>
+{% endblock %}
