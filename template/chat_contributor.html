@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+{% block content %}
+<div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="golden-text">💬 Chat with Admin</h4>
+        <span class="badge bg-gold text-dark">Event: {{ event.title }}</span>
+    </div>
+    <hr>
+    <div id="chatMessages" style="height:400px; overflow-y:auto;" class="p-3 bg-dark rounded">
+        {% for msg in messages %}
+        <div class="mb-2">
+            <div class="d-flex justify-content-{{ 'end' if msg.sender_type == 'contributor' else 'start' }}">
+                <div class="p-2 rounded {% if msg.sender_type == 'contributor' %}bg-gold text-dark{% else %}bg-secondary text-light{% endif %}" style="max-width:70%;">
+                    <strong>{{ 'You' if msg.sender_type == 'contributor' else 'Admin' }}</strong>
+                    <p class="mb-0">{{ msg.message }}</p>
+                    <small class="text-muted-light">{{ msg.timestamp.strftime('%H:%M') }}</small>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <form id="chatForm" class="d-flex mt-3">
+        <input type="text" id="chatMessage" class="form-control bg-dark text-light me-2" placeholder="Type a message..." required>
+        <input type="hidden" id="conversationId" value="{{ conv.id }}">
+        <input type="hidden" id="senderType" value="contributor">
+        <input type="hidden" id="senderId" value="{{ contrib.id }}">
+        <button type="submit" class="btn btn-gold">Send</button>
+    </form>
+</div>
+
+<div class="mt-3 text-center">
+    <a href="{{ url_for('contributor_view', token=contrib.token) }}" class="text-muted-light">← Back to My Contribution</a>
+</div>
+
+{% block scripts %}
+<script>
+    const conversationId = {{ conv.id }};
+    socket.emit('join_conversation', { conversation_id: conversationId });
+
+    const chatDiv = document.getElementById('chatMessages');
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+
+    socket.on('new_private_message', function(data) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'mb-2';
+        const align = data.sender_type === 'contributor' ? 'end' : 'start';
+        const bg = data.sender_type === 'contributor' ? 'bg-gold text-dark' : 'bg-secondary text-light';
+        const sender = data.sender_type === 'contributor' ? 'You' : 'Admin';
+        msgDiv.innerHTML = `
+            <div class="d-flex justify-content-${align}">
+                <div class="p-2 rounded ${bg}" style="max-width:70%;">
+                    <strong>${sender}</strong>
+                    <p class="mb-0">${data.message}</p>
+                    <small class="text-muted-light">${data.time}</small>
+                </div>
+            </div>
+        `;
+        chatDiv.appendChild(msgDiv);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+    });
+
+    document.getElementById('chatForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const message = document.getElementById('chatMessage').value.trim();
+        if (message) {
+            socket.emit('private_message', {
+                conversation_id: conversationId,
+                sender_type: 'contributor',
+                sender_id: {{ contrib.id }},
+                message: message
+            });
+            document.getElementById('chatMessage').value = '';
+        }
+    });
+</script>
+{% endblock %}
