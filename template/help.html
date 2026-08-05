@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Admin Help & Guide{% endblock %}
+{% block content %}
+<div class="glass-card p-4">
+    <h1 class="golden-text text-center">📖 Admin Guide – GoldenVow</h1>
+    <p class="text-muted-light text-center">Everything you need to know to manage your fundraising events.</p>
+    <hr>
+
+    <!-- 👑 SUPER ADMIN -->
+    <div class="alert alert-success bg-dark text-light" style="border-left: 4px solid var(--gold);">
+        <h5 class="golden-text">👑 You Are the Super Admin!</h5>
+        <p><strong>What you earn:</strong> <span class="golden-text">2% platform fee</span> from EVERY contribution across ALL events.</p>
+        <p><strong>Minimum withdrawal:</strong> Fees must reach at least <strong>KES 50</strong> before you can withdraw.</p>
+        <p><strong>What you control:</strong> Approve withdrawals, manage admins, lock/unlock events, system settings.</p>
+    </div>
+
+    <!-- 🧑‍💼 ADMIN -->
+    <div class="alert alert-info bg-dark text-light" style="border-left: 4px solid #3498db;">
+        <h5 class="text-info">🧑‍💼 Admins</h5>
+        <p><strong>What they earn:</strong> The FULL pledge amount from contributors (the 2% fee goes to Super Admin).</p>
+        <p><strong>What they do:</strong> Create events, manage contributors, approve/decline payments.</p>
+        <p><strong>Event Locking:</strong> If your event's total fee reaches KES 50+ and you don't pay within 3 days, the event locks.</p>
+    </div>
+
+    <hr>
+
+    <h4 class="golden-text mt-4">🔄 The Complete Money Flow</h4>
+    <ol>
+        <li><strong>Contributor sends money</strong> to the admin's account</li>
+        <li><strong>Admin approves</strong> the contribution on the system</li>
+        <li><strong>System deducts 2%</strong> – this goes to Super Admin</li>
+        <li><strong>Admin gets the full amount</strong> from the contributor</li>
+        <li><strong>Super Admin accumulates</strong> ALL 2% fees from ALL events</li>
+        <li><strong>Super Admin withdraws</strong> when fees reach KES 50+</li>
+    </ol>
+
+    <h4 class="golden-text mt-4">📌 Important Rules</h4>
+    <ul>
+        <li><strong>Event Locking:</strong> Events lock if total fee reaches KES 50 and is NOT paid within 3 days.</li>
+        <li><strong>When Locked:</strong> NO ONE can access the event – not even the admin.</li>
+        <li><strong>Unlocking:</strong> Admin pays Super Admin, then clicks "Request Unlock".</li>
+        <li><strong>Super Admin Withdrawal:</strong> Only withdraw when fees reach KES 50 or more.</li>
+    </ul>
+
+    <hr>
+    <p class="text-center text-muted-light">Need help? Contact support: {{ support_whatsapp }} or {{ support_email }}</p>
+    <div class="text-center">
+        <a href="{{ url_for('super_dashboard') if get_admin().is_super_admin else url_for('dashboard') }}" class="btn btn-gold">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
