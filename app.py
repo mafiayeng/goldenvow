@@ -1,4 +1,4 @@
-# ==================== app.py – COMPLETE FINAL VERSION ====================
+# ==================== app.py – COMPLETE WITH CONTRIBUTOR ACCOUNTS ====================
 import os, uuid, random, string, io, secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
@@ -24,6 +24,7 @@ SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
 SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '0737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'support@goldenvow.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET', 'changeme_super_secret_123')
+MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
 
 # ---------- MODELS ----------
 class Admin(db.Model):
@@ -54,6 +55,7 @@ class Event(db.Model):
     event_date = db.Column(db.DateTime, nullable=False)
     picture_url = db.Column(db.String(500))
     background_image_url = db.Column(db.String(500), nullable=True)
+    account_name = db.Column(db.String(150), nullable=True)
     paybill = db.Column(db.String(50))
     mpesa_number = db.Column(db.String(20))
     till_number = db.Column(db.String(50))
@@ -77,6 +79,12 @@ class Event(db.Model):
 
 class Contributor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # 🔥 New account fields
+    username = db.Column(db.String(100), unique=True, nullable=True)
+    password_hash = db.Column(db.String(200), nullable=True)
+    last_login = db.Column(db.DateTime, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    # Existing fields
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
     token = db.Column(db.String(100), unique=True, nullable=False)
     pin = db.Column(db.String(4), nullable=False, default='0000')
@@ -88,6 +96,8 @@ class Contributor(db.Model):
     paid_amount = db.Column(db.Float, default=0.0)
     status = db.Column(db.String(20), default='pending')
     decline_reason = db.Column(db.Text, nullable=True)
+    sender_name = db.Column(db.String(150), nullable=True)
+    auto_verified = db.Column(db.Boolean, default=False)
     payment_proof_screenshot = db.Column(db.String(500))
     payment_proof_text = db.Column(db.Text)
     completed_at = db.Column(db.DateTime, nullable=True)
@@ -195,18 +205,35 @@ class FeatureRequest(db.Model):
 # ---------- CREATE TABLES & MIGRATIONS ----------
 with app.app_context():
     db.create_all()
+    # Ensure settings
     for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
         if not Setting.query.filter_by(key=key).first():
             db.session.add(Setting(key=key, value=default))
             db.session.commit()
+    # Add new columns if missing
     try:
         inspector = inspect(db.engine)
         cols = [c['name'] for c in inspector.get_columns('contributor')]
         if 'decline_reason' not in cols:
             db.engine.execute('ALTER TABLE contributor ADD COLUMN decline_reason TEXT')
+        if 'sender_name' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN sender_name VARCHAR(150)')
+        if 'auto_verified' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN auto_verified BOOLEAN DEFAULT 0')
+        if 'username' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN username VARCHAR(100)')
+        if 'password_hash' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN password_hash VARCHAR(200)')
+        if 'last_login' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN last_login TIMESTAMP')
+        if 'is_active' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN is_active BOOLEAN DEFAULT 1')
         cols = [c['name'] for c in inspector.get_columns('admin')]
         if 'is_active' not in cols:
             db.engine.execute('ALTER TABLE admin ADD COLUMN is_active BOOLEAN DEFAULT 1')
+        cols = [c['name'] for c in inspector.get_columns('event')]
+        if 'account_name' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN account_name VARCHAR(150)')
     except Exception as e:
         print(f"Migration warning: {e}")
 
@@ -214,10 +241,18 @@ with app.app_context():
 def is_admin_logged_in():
     return session.get('admin_id') is not None
 
+def is_contributor_logged_in():
+    return session.get('contributor_id') is not None
+
 def get_admin():
     if not is_admin_logged_in():
         return None
     return Admin.query.get(session['admin_id'])
+
+def get_contributor():
+    if not is_contributor_logged_in():
+        return None
+    return Contributor.query.get(session['contributor_id'])
 
 def is_super_admin():
     admin = get_admin()
@@ -265,13 +300,20 @@ def get_fee_percentage(admin_id):
 def calculate_fee(amount, admin_id=None):
     fee_pct = get_fee_percentage(admin_id) if admin_id else SERVICE_FEE_PERCENTAGE
     fee = round(amount * (fee_pct / 100), 2)
-    return max(fee, 1)
+    return max(fee, 0.0)
 
 def get_event_total_contributions(event_id):
-    return db.session.query(func.sum(Contributor.pledge_amount)).filter_by(event_id=event_id, status='approved').scalar() or 0
+    return db.session.query(func.sum(Contributor.paid_amount)).filter_by(
+        event_id=event_id, status='approved'
+    ).scalar() or 0
 
 def get_event_total_fee(event_id):
-    return db.session.query(func.sum(Contributor.fee_amount)).filter_by(event_id=event_id, status='approved').scalar() or 0
+    return db.session.query(func.sum(Contributor.fee_amount)).filter_by(
+        event_id=event_id, status='approved'
+    ).scalar() or 0
+
+def get_global_total_fees():
+    return db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
 
 def get_admin_total_fees(admin_id):
     events = Event.query.filter_by(admin_id=admin_id).all()
@@ -279,6 +321,22 @@ def get_admin_total_fees(admin_id):
     for e in events:
         total += get_event_total_fee(e.id)
     return total
+
+# 🔥 Updated: Event only locks if fee has reached 50 or above
+def is_fee_overdue(event):
+    if not event.first_contribution_date:
+        return False
+    if event.fee_paid:
+        return False
+    total_fee = get_event_total_fee(event.id)
+    if total_fee < 50.0:
+        return False
+    due_date = event.first_contribution_date + timedelta(days=3)
+    if datetime.utcnow() > due_date:
+        grace_end = due_date + timedelta(hours=1)
+        if datetime.utcnow() > grace_end:
+            return True
+    return False
 
 def get_page_lock_status(event, contributor_token=None):
     if event.disabled:
@@ -291,18 +349,6 @@ def get_page_lock_status(event, contributor_token=None):
         return False
     if is_fee_overdue(event):
         return True
-    return False
-
-def is_fee_overdue(event):
-    if not event.first_contribution_date:
-        return False
-    if event.fee_paid:
-        return False
-    due_date = event.first_contribution_date + timedelta(days=3)
-    if datetime.utcnow() > due_date:
-        grace_end = due_date + timedelta(hours=1)
-        if datetime.utcnow() > grace_end:
-            return True
     return False
 
 def get_daily_note(event_type, day):
@@ -356,14 +402,18 @@ def utility_processor():
         get_event_total_contributions=get_event_total_contributions,
         get_event_total_fee=get_event_total_fee,
         get_admin_total_fees=get_admin_total_fees,
+        get_global_total_fees=get_global_total_fees,
         get_page_lock_status=get_page_lock_status,
         generate_event_logo=generate_event_logo,
         get_unread_notifications=get_unread_notifications,
         is_admin_logged_in=is_admin_logged_in,
+        is_contributor_logged_in=is_contributor_logged_in,
         get_admin=get_admin,
+        get_contributor=get_contributor,
         support_whatsapp=SUPPORT_WHATSAPP,
         support_email=SUPPORT_EMAIL,
         fee_percentage=SERVICE_FEE_PERCENTAGE,
+        minimum_withdrawal_fee=MINIMUM_WITHDRAWAL_FEE,
         now=datetime.utcnow
     )
 
@@ -376,7 +426,8 @@ def check_maintenance():
         return
     setting = Setting.query.filter_by(key='maintenance_mode').first()
     if setting and setting.value == 'True':
-        allowed = ['login', 'register', 'maintenance', 'contact', 'forgot_password', 'reset_password']
+        allowed = ['login', 'register', 'maintenance', 'contact', 'forgot_password', 'reset_password', 
+                   'contributor_login', 'contributor_register', 'contributor_dashboard']
         if request.endpoint not in allowed:
             msg = Setting.query.filter_by(key='maintenance_message').first()
             eta = Setting.query.filter_by(key='maintenance_eta').first()
@@ -440,7 +491,6 @@ def handle_join_conversation(data):
     room = f"conversation_{conv_id}"
     join_room(room)
 
-# ---------- EMIT HELPER ----------
 def emit_contribution_update(event_token):
     event = Event.query.filter_by(token=event_token).first()
     if event:
@@ -467,7 +517,7 @@ def run_migration():
         return "Unauthorized", 401
     return "Migration done."
 
-# ---------- AUTH ----------
+# ---------- ADMIN AUTH ----------
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -570,7 +620,105 @@ def reset_password(token):
         return redirect(url_for('login'))
     return render_template('reset_password.html', token=token)
 
-# ---------- DASHBOARDS ----------
+# ---------- CONTRIBUTOR AUTH (NEW) ----------
+@app.route('/contributor/register', methods=['GET', 'POST'])
+def contributor_register():
+    event_token = request.args.get('event_token', '')
+    event = None
+    if event_token:
+        event = Event.query.filter_by(token=event_token).first()
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        event_token_post = request.form.get('event_token', '').strip()
+        
+        if not username or not password or not name:
+            flash('Username, password, and name are required.', 'error')
+            return render_template('contributor_register.html', event_token=event_token_post, event=event)
+        
+        if Contributor.query.filter_by(username=username).first():
+            flash('Username already taken.', 'error')
+            return render_template('contributor_register.html', event_token=event_token_post, event=event)
+        
+        token = generate_unique_token()
+        while Contributor.query.filter_by(token=token).first():
+            token = generate_unique_token()
+        
+        contrib = Contributor(
+            token=token,
+            username=username,
+            password_hash=hash_password(password),
+            name=name,
+            phone=phone,
+            status='pending'
+        )
+        db.session.add(contrib)
+        db.session.commit()
+        
+        session['contributor_id'] = contrib.id
+        
+        flash('Registration successful! You are now logged in.', 'success')
+        if event_token_post:
+            return redirect(url_for('event_landing', token=event_token_post))
+        return redirect(url_for('contributor_dashboard'))
+    
+    return render_template('contributor_register.html', event_token=event_token, event=event)
+
+@app.route('/contributor/login', methods=['GET', 'POST'])
+def contributor_login():
+    event_token = request.args.get('event_token', '')
+    event = None
+    if event_token:
+        event = Event.query.filter_by(token=event_token).first()
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        remember = request.form.get('remember') == 'on'
+        event_token_post = request.form.get('event_token', '').strip()
+        
+        contrib = Contributor.query.filter_by(username=username, is_active=True).first()
+        if contrib and check_password(password, contrib.password_hash):
+            session['contributor_id'] = contrib.id
+            contrib.last_login = datetime.utcnow()
+            db.session.commit()
+            if remember:
+                session.permanent = True
+            flash('Logged in successfully!', 'success')
+            if event_token_post:
+                return redirect(url_for('event_landing', token=event_token_post))
+            return redirect(url_for('contributor_dashboard'))
+        flash('Invalid username or password.', 'error')
+    
+    return render_template('contributor_login.html', event_token=event_token, event=event)
+
+@app.route('/contributor/logout')
+def contributor_logout():
+    session.pop('contributor_id', None)
+    flash('Logged out.', 'info')
+    return redirect(url_for('contributor_login'))
+
+@app.route('/contributor/dashboard')
+def contributor_dashboard():
+    if not is_contributor_logged_in():
+        flash('Please log in first.', 'error')
+        return redirect(url_for('contributor_login'))
+    
+    contrib = get_contributor()
+    if not contrib:
+        session.pop('contributor_id', None)
+        return redirect(url_for('contributor_login'))
+    
+    # Get ALL contributions by this contributor (by name and phone)
+    # 🔥 They can only see their OWN contributions
+    contributions = Contributor.query.filter_by(name=contrib.name, phone=contrib.phone).order_by(desc(Contributor.created_at)).all()
+    
+    return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions)
+
+# ---------- ADMIN DASHBOARDS ----------
 @app.route('/')
 def index():
     if is_admin_logged_in():
@@ -603,18 +751,19 @@ def super_dashboard():
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
     total_events = Event.query.count()
-    total_contributions = db.session.query(func.sum(Contributor.pledge_amount)).filter_by(status='approved').scalar() or 0
+    total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status='approved').scalar() or 0
     total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
     pending_withdrawals = Withdrawal.query.filter_by(status='pending').count()
     locked_events = Event.query.filter(Event.disabled == True).count()
     pending_feature_requests = FeatureRequest.query.filter_by(status='pending').count()
     contact_messages_count = ContactMessage.query.filter_by(is_read=False).count()
     admins = Admin.query.all()
+    can_withdraw = total_fees >= MINIMUM_WITHDRAWAL_FEE
     return render_template('super_dashboard.html', admin=admin, total_events=total_events,
                            total_contributions=total_contributions, total_fees=total_fees,
                            pending_withdrawals=pending_withdrawals, locked_events=locked_events,
                            admins=admins, pending_feature_requests=pending_feature_requests,
-                           contact_messages_count=contact_messages_count)
+                           contact_messages_count=contact_messages_count, can_withdraw=can_withdraw)
 
 @app.route('/manage-admins')
 def manage_admins():
@@ -675,6 +824,7 @@ def create_event():
             event_date=datetime.strptime(request.form.get('event_date'), '%Y-%m-%dT%H:%M'),
             picture_url=request.form.get('picture_url'),
             background_image_url=request.form.get('background_image_url'),
+            account_name=request.form.get('account_name'),
             paybill=request.form.get('paybill'),
             mpesa_number=request.form.get('mpesa_number'),
             till_number=request.form.get('till_number'),
@@ -700,6 +850,12 @@ def event_landing(token):
         return redirect(url_for('dashboard'))
     if get_page_lock_status(event):
         return render_template('event_locked.html', event=event)
+    
+    # 🔥 Get logged-in contributor info if any
+    contributor = None
+    if is_contributor_logged_in():
+        contributor = get_contributor()
+    
     contributions = Contributor.query.filter_by(event_id=event.id, status='approved').order_by(desc(Contributor.created_at)).all()
     total_raised = get_event_total_contributions(event.id)
     chat_messages = ChatMessage.query.filter_by(event_id=event.id).order_by(ChatMessage.timestamp).limit(50).all()
@@ -708,7 +864,8 @@ def event_landing(token):
     daily_note = get_daily_note(event.event_type, days)
     return render_template('event_landing.html', event=event, contributions=contributions,
                            total_raised=total_raised, chat_messages=chat_messages,
-                           testimonials=testimonials, daily_note=daily_note)
+                           testimonials=testimonials, daily_note=daily_note,
+                           contributor=contributor)
 
 @app.route('/events/<token>/edit', methods=['GET', 'POST'])
 def edit_event(token):
@@ -727,6 +884,7 @@ def edit_event(token):
         event.event_date = datetime.strptime(request.form.get('event_date'), '%Y-%m-%dT%H:%M')
         event.picture_url = request.form.get('picture_url')
         event.background_image_url = request.form.get('background_image_url')
+        event.account_name = request.form.get('account_name')
         event.paybill = request.form.get('paybill')
         event.mpesa_number = request.form.get('mpesa_number')
         event.till_number = request.form.get('till_number')
@@ -852,13 +1010,14 @@ def add_contributor(token):
     if not name or not phone or pledge <= 0:
         flash('All fields required.', 'error')
         return redirect(url_for('manage_contributors', token=token))
-    fee = calculate_fee(pledge, event.admin_id)
-    net = pledge - fee
     ct = generate_unique_token()
     while Contributor.query.filter_by(token=ct).first():
         ct = generate_unique_token()
-    contrib = Contributor(event_id=event.id, token=ct, pin=generate_pin(), name=name, phone=phone,
-                          pledge_amount=pledge, fee_amount=fee, net_contribution=net, status='pending')
+    contrib = Contributor(
+        event_id=event.id, token=ct, pin=generate_pin(),
+        name=name, phone=phone, pledge_amount=pledge,
+        status='pending'
+    )
     db.session.add(contrib)
     db.session.commit()
     if not event.first_contribution_date:
@@ -880,41 +1039,58 @@ def contributor_view(token):
         conv = Conversation(event_id=event.id, admin_id=event.admin_id, contributor_id=contrib.id)
         db.session.add(conv)
         db.session.commit()
+    
+    # 🔥 Check if viewer is admin or the contributor themselves
+    is_admin_user = is_admin_logged_in()
+    is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
+    
     return render_template('contributor_view.html', contrib=contrib, event=event, payments=payments,
-                           show_payments=show_payments, conversation_id=conv.id)
+                           show_payments=show_payments, conversation_id=conv.id,
+                           is_admin_user=is_admin_user, is_contributor_owner=is_contributor_owner)
 
 @app.route('/contributor/<token>/approve', methods=['POST'])
 def approve_contributor(token):
     if not is_admin_logged_in():
         return redirect(url_for('login'))
+    
     admin = get_admin()
     if admin.is_super_admin:
         flash('Super admins cannot approve contributions. Use a normal admin account.', 'error')
         return redirect(url_for('super_dashboard'))
+    
     contrib = Contributor.query.filter_by(token=token).first_or_404()
     event = Event.query.get(contrib.event_id)
+    
     if event.admin_id != admin.id:
         flash('You are not the admin of this event.', 'error')
         return redirect(url_for('dashboard'))
+    
     if contrib.status == 'pending':
         received = float(request.form.get('received_amount', contrib.pledge_amount))
-        if received > 0:
-            contrib.paid_amount = received
-            fee = calculate_fee(received, event.admin_id)
-            contrib.fee_amount = fee
-            contrib.net_contribution = received - fee
-            contrib.status = 'approved'
-            contrib.completed_at = datetime.utcnow()
-            payment = Payment(contributor_id=contrib.id, amount=received, note='Approved by admin')
-            db.session.add(payment)
-            db.session.commit()
-            create_notification(admin.id, f'Contribution from {contrib.name} approved.', 'success', event.id, contrib.id)
-            emit_contribution_update(event.token)
-            flash('Contribution approved.', 'success')
-        else:
+        if received <= 0:
             flash('Received amount must be > 0.', 'error')
+            return redirect(url_for('manage_contributors', token=event.token))
+        
+        fee = calculate_fee(received, event.admin_id)
+        net = received - fee
+        
+        contrib.paid_amount = received
+        contrib.fee_amount = fee
+        contrib.net_contribution = net
+        contrib.status = 'approved'
+        contrib.completed_at = datetime.utcnow()
+        
+        payment = Payment(contributor_id=contrib.id, amount=received, note=f'Approved. Fee: KES {fee}')
+        db.session.add(payment)
+        db.session.commit()
+        
+        create_notification(admin.id, f'Contribution from {contrib.name} approved.', 'success', event.id, contrib.id)
+        emit_contribution_update(event.token)
+        
+        flash(f'✅ Contribution approved! Fee: KES {fee}', 'success')
     else:
         flash('Already processed.', 'info')
+    
     return redirect(url_for('manage_contributors', token=event.token))
 
 @app.route('/contributor/<token>/decline', methods=['POST'])
@@ -945,8 +1121,11 @@ def decline_contributor(token):
 def submit_payment_proof(token):
     contrib = Contributor.query.filter_by(token=token).first_or_404()
     event = Event.query.get(contrib.event_id)
+    
+    sender_name = request.form.get('sender_name', '').strip()
     text = request.form.get('payment_proof_text', '').strip()
     file = request.files.get('screenshot')
+    
     file_path = None
     if file and file.filename:
         ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
@@ -955,23 +1134,49 @@ def submit_payment_proof(token):
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         file.save(file_path)
         file_path = file_path.replace('\\', '/')
+    
     contrib.payment_proof_screenshot = file_path
     contrib.payment_proof_text = text
+    contrib.sender_name = sender_name
+    
+    auto_verified = False
+    if event.account_name and sender_name:
+        if sender_name.lower().strip() == event.account_name.lower().strip():
+            auto_verified = True
+    contrib.auto_verified = auto_verified
+    
     db.session.commit()
-    flash('Proof submitted. Admin will review.', 'success')
+    
     admin = Admin.query.get(event.admin_id)
-    create_notification(admin.id, f'New payment proof from {contrib.name}.', 'info', event.id, contrib.id)
+    create_notification(
+        admin.id,
+        f'📎 Payment proof from {contrib.name}. System verification: {"✅ MATCH" if auto_verified else "⚠️ MISMATCH"}',
+        'info',
+        event.id,
+        contrib.id
+    )
+    
+    flash('📎 Payment proof submitted. Admin will review.', 'info')
     return redirect(url_for('contributor_view', token=contrib.token))
 
 @app.route('/contributor/<token>/receipt')
 def contributor_receipt(token):
     contrib = Contributor.query.filter_by(token=token).first_or_404()
+    
     if contrib.status != 'approved' or not contrib.completed_at:
         flash('Only approved contributions have receipts.', 'error')
         return redirect(url_for('contributor_view', token=token))
-    if (datetime.utcnow() - contrib.completed_at).days < 7:
-        flash('Receipt available after 7 days.', 'error')
-        return redirect(url_for('contributor_view', token=token))
+    
+    # 🔥 Check if viewer is admin or the contributor themselves
+    is_admin_user = is_admin_logged_in()
+    is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
+    
+    # 🔥 Admin can download anytime. Contributor must wait 7 days.
+    if not is_admin_user:
+        if (datetime.utcnow() - contrib.completed_at).days < 7:
+            flash('Receipt available after 7 days.', 'error')
+            return redirect(url_for('contributor_view', token=token))
+    
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -980,10 +1185,12 @@ def contributor_receipt(token):
     p.setFont("Helvetica", 12)
     p.drawString(50, height - 80, f"Name: {contrib.name}")
     p.drawString(50, height - 100, f"Phone: {contrib.phone}")
-    p.drawString(50, height - 120, f"Amount: KES {contrib.paid_amount:,.2f}")
-    p.drawString(50, height - 140, f"Event: {contrib.event.title}")
-    p.drawString(50, height - 160, f"Date: {contrib.completed_at.strftime('%Y-%m-%d %H:%M')}")
-    p.drawString(50, height - 180, f"Receipt #: {contrib.token}")
+    p.drawString(50, height - 120, f"Amount Paid: KES {contrib.paid_amount:,.2f}")
+    p.drawString(50, height - 140, f"Fee: KES {contrib.fee_amount:,.2f}")
+    p.drawString(50, height - 160, f"Net: KES {contrib.net_contribution:,.2f}")
+    p.drawString(50, height - 180, f"Event: {contrib.event.title}")
+    p.drawString(50, height - 200, f"Date: {contrib.completed_at.strftime('%Y-%m-%d %H:%M')}")
+    p.drawString(50, height - 220, f"Receipt #: {contrib.token}")
     p.save()
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"receipt_{contrib.token}.pdf", mimetype='application/pdf')
@@ -1035,11 +1242,8 @@ def contributor_chat(token):
 def submit_feature_request(event_token=None):
     event = None
     contributor_token = request.args.get('contributor_token')
-    contributor = None
     if event_token:
         event = Event.query.filter_by(token=event_token).first_or_404()
-    if contributor_token:
-        contributor = Contributor.query.filter_by(token=contributor_token).first()
     contributor_name = request.args.get('name', '')
     contributor_email = request.args.get('email', '')
     if request.method == 'POST':
@@ -1085,23 +1289,17 @@ def submit_feature_request(event_token=None):
 
 @app.route('/manage-feature-requests')
 def manage_feature_requests():
-    if not is_admin_logged_in():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
         return redirect(url_for('login'))
-    admin = get_admin()
-    if not admin.is_super_admin:
-        flash('Only Super Admin can manage feature requests.', 'error')
-        return redirect(url_for('dashboard'))
     requests = FeatureRequest.query.order_by(desc(FeatureRequest.created_at)).all()
     return render_template('manage_feature_requests.html', requests=requests)
 
 @app.route('/feature-request/<int:req_id>/update', methods=['POST'])
 def update_feature_request(req_id):
-    if not is_admin_logged_in():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
         return redirect(url_for('login'))
-    admin = get_admin()
-    if not admin.is_super_admin:
-        flash('Only Super Admin can update feature requests.', 'error')
-        return redirect(url_for('dashboard'))
     req = FeatureRequest.query.get_or_404(req_id)
     status = request.form.get('status')
     response = request.form.get('response', '').strip()
@@ -1161,21 +1359,32 @@ def request_withdrawal():
     if not is_admin_logged_in():
         return redirect(url_for('login'))
     admin = get_admin()
+    if not admin.is_super_admin:
+        flash('Only Super Admin can request withdrawal.', 'error')
+        return redirect(url_for('dashboard'))
+    
     amount = float(request.form.get('amount', 0))
     phone = request.form.get('phone', '').strip()
     method = request.form.get('method', 'mpesa')
+    
     if amount <= 0 or not phone:
-        flash('Invalid.', 'error')
-        return redirect(url_for('dashboard'))
-    total_fees = get_admin_total_fees(admin.id)
+        flash('Invalid amount or phone.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    if amount < MINIMUM_WITHDRAWAL_FEE:
+        flash(f'Minimum withdrawal amount is KES {MINIMUM_WITHDRAWAL_FEE}.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
     if amount > total_fees:
-        flash('Insufficient fees earned.', 'error')
-        return redirect(url_for('dashboard'))
+        flash(f'Insufficient fees earned. You have KES {total_fees:.2f}.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
     wd = Withdrawal(admin_id=admin.id, amount=amount, phone=phone, method=method, status='pending')
     db.session.add(wd)
     db.session.commit()
-    flash('Withdrawal request submitted.', 'success')
-    return redirect(url_for('dashboard'))
+    flash(f'Withdrawal request of KES {amount:.2f} submitted.', 'success')
+    return redirect(url_for('super_dashboard'))
 
 @app.route('/withdrawal/<int:wid>/update', methods=['POST'])
 def update_withdrawal(wid):
@@ -1311,6 +1520,13 @@ def profile():
         flash('Profile updated.', 'success')
         return redirect(url_for('profile'))
     return render_template('profile.html', admin=admin)
+
+# ---------- HELP PAGE ----------
+@app.route('/help')
+def help_page():
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    return render_template('help.html')
 
 # ---------- SCHEDULER ----------
 def check_pending_contributions():
