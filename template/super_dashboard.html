@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Super Admin Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="golden-text">👑 Super Admin Dashboard</h2>
+    <span class="badge bg-gold text-dark">You are the Super Admin</span>
+</div>
+
+<!-- Global Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="glass-card p-3 text-center">
+            <h3 class="golden-text">{{ total_events }}</h3>
+            <small>Total Events (All Admins)</small>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="glass-card p-3 text-center">
+            <h3 class="golden-text">KES {{ total_contributions|round(2)|int }}</h3>
+            <small>Total Raised (Global)</small>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="glass-card p-3 text-center">
+            <h3 class="golden-text">KES {{ total_fees|round(2) }}</h3>
+            <small>Total Fees Collected</small>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="glass-card p-3 text-center">
+            <h3 class="golden-text">{{ pending_withdrawals }}</h3>
+            <small>Pending Withdrawals</small>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <a href="{{ url_for('manage_admins') }}" class="text-decoration-none">
+            <div class="glass-card p-3 text-center">
+                <i class="bi bi-people fs-2 golden-text"></i>
+                <p>Manage Admins</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('withdrawals') }}" class="text-decoration-none">
+            <div class="glass-card p-3 text-center">
+                <i class="bi bi-arrow-up-circle fs-2 golden-text"></i>
+                <p>Manage Withdrawals</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('settings') }}" class="text-decoration-none">
+            <div class="glass-card p-3 text-center">
+                <i class="bi bi-gear fs-2 golden-text"></i>
+                <p>System Settings</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- All Admins -->
+<h4 class="golden-text">👥 All Admins</h4>
+<div class="table-responsive">
+    <table class="table table-dark table-hover">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Referrals</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in admins %}
+            <tr>
+                <td>{{ a.username }} {% if a.is_super_admin %}👑{% endif %}</td>
+                <td>{{ a.email }}</td>
+                <td>{{ a.referral_count }}</td>
+                <td>
+                    {% if a.is_active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-danger">Disabled</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if not a.is_super_admin %}
+                    <form method="POST" action="{{ url_for('toggle_admin', aid=a.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                            {{ 'Disable' if a.is_active else 'Enable' }}
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('delete_admin', aid=a.id) }}" style="display:inline;" onsubmit="return confirm('Delete this admin?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted-light">Protected</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Locked Events -->
+{% if locked_events > 0 %}
+<div class="mt-4">
+    <div class="glass-card p-3">
+        <h5 class="golden-text">🔒 Locked Events ({{ locked_events }})</h5>
+        <p class="text-muted-light">These events are locked because fees are overdue.</p>
+        <a href="{{ url_for('super_dashboard') }}" class="btn btn-sm btn-outline-gold">View All</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
