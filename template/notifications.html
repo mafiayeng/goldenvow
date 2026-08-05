@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="golden-text">🔔 Notifications</h2>
+    <form method="POST" action="{{ url_for('mark_all_notifications_read') }}">
+        <button type="submit" class="btn btn-sm btn-gold">Mark All Read</button>
+    </form>
+</div>
+
+<div class="list-group">
+    {% for n in notifications %}
+    <div class="list-group-item bg-dark text-light border-secondary d-flex justify-content-between align-items-center">
+        <div>
+            {% if n.type == 'feature_request' %}
+                <i class="bi bi-lightbulb golden-text"></i>
+            {% elif n.type == 'fee_request' %}
+                <i class="bi bi-coin golden-text"></i>
+            {% elif n.type == 'reminder' %}
+                <i class="bi bi-clock"></i>
+            {% elif n.type == 'chat' %}
+                <i class="bi bi-chat-dots golden-text"></i>
+            {% else %}
+                <i class="bi bi-bell"></i>
+            {% endif %}
+            <span>{{ n.message }}</span>
+            <small class="text-muted-light d-block">{{ n.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+        </div>
+        {% if not n.is_read %}
+        <form method="POST" action="{{ url_for('mark_notification_read', nid=n.id) }}">
+            <button type="submit" class="btn btn-sm btn-outline-success">✓ Read</button>
+        </form>
+        {% else %}
+        <span class="badge bg-success">Read</span>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="glass-card p-4 text-center">
+        <i class="bi bi-bell-slash fs-1 golden-text"></i>
+        <p class="text-muted-light mt-2">No notifications</p>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="mt-3 text-center">
+    <a href="{{ url_for('dashboard') if not get_admin().is_super_admin else url_for('super_dashboard') }}" class="text-muted-light">← Back</a>
+</div>
+{% endblock %}
