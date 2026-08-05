@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Contributor Register{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="glass-card p-4">
+            <h3 class="golden-text text-center">📝 Contributor Registration</h3>
+            <p class="text-muted-light text-center">Create your account to make contributions easily.</p>
+            <hr>
+            <form method="POST">
+                <div class="mb-2">
+                    <label class="form-label">Username <span class="text-danger">*</span></label>
+                    <input type="text" name="username" class="form-control bg-dark text-light" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Password <span class="text-danger">*</span></label>
+                    <input type="password" name="password" class="form-control bg-dark text-light" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control bg-dark text-light" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                    <input type="tel" name="phone" class="form-control bg-dark text-light" required>
+                </div>
+                {% if event_token %}
+                <input type="hidden" name="event_token" value="{{ event_token }}">
+                {% endif %}
+                <button type="submit" class="btn btn-gold w-100">Register</button>
+            </form>
+            <div class="mt-3 text-center">
+                <small class="text-muted-light">Already have an account? <a href="{{ url_for('contributor_login', event_token=event_token) }}" class="golden-text">Login</a></small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
