@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Withdrawals{% endblock %}
+{% block content %}
+<h2 class="golden-text">💰 Withdrawal Requests</h2>
+
+<div class="table-responsive">
+    <table class="table table-dark table-hover">
+        <thead>
+            <tr>
+                <th>Admin</th>
+                <th>Amount</th>
+                <th>Phone</th>
+                <th>Method</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for w in withdrawals %}
+        <tr>
+            <td>{{ w.admin_id }}</td>
+            <td class="golden-text">KES {{ w.amount|round(2) }}</td>
+            <td>{{ w.phone }}</td>
+            <td>{{ w.method|title }}</td>
+            <td>
+                <span class="badge bg-{{ 'success' if w.status == 'paid' else 'danger' if w.status == 'failed' else 'warning' }}">
+                    {{ w.status|title }}
+                </span>
+            </td>
+            <td>{{ w.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('update_withdrawal', wid=w.id) }}" class="d-flex">
+                    <select name="status" class="form-select form-select-sm bg-dark text-light me-1" style="width:100px;">
+                        <option value="pending" {% if w.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="paid" {% if w.status == 'paid' %}selected{% endif %}>Paid</option>
+                        <option value="failed" {% if w.status == 'failed' %}selected{% endif %}>Failed</option>
+                        <option value="cancelled" {% if w.status == 'cancelled' %}selected{% endif %}>Cancel</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-gold">Update</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3 text-center">
+    <a href="{{ url_for('super_dashboard') }}" class="text-muted-light">← Back to Super Dashboard</a>
+</div>
+{% endblock %}
