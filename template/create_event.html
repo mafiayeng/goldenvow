@@ -4,7 +4,6 @@
 <h2 class="golden-text">✨ Create New Event</h2>
 <div class="glass-card p-4">
     <form method="POST" class="row g-3">
-        <!-- Event Type -->
         <div class="col-md-6">
             <label class="form-label">Event Type</label>
             <select name="event_type" class="form-select bg-dark text-light">
@@ -16,52 +15,35 @@
                 <option value="other">✦ Other</option>
             </select>
         </div>
-        
-        <!-- Title -->
         <div class="col-md-6">
-            <label class="form-label">Event Title</label>
+            <label class="form-label">Event Title <span class="text-danger">*</span></label>
             <input type="text" name="title" class="form-control bg-dark text-light" required>
         </div>
-        
-        <!-- Description -->
         <div class="col-12">
             <label class="form-label">Description</label>
             <textarea name="description" class="form-control bg-dark text-light" rows="3"></textarea>
         </div>
-        
-        <!-- Target Amount -->
         <div class="col-md-4">
-            <label class="form-label">Target Amount (KES)</label>
+            <label class="form-label">Target Amount (KES) <span class="text-danger">*</span></label>
             <input type="number" name="target_amount" class="form-control bg-dark text-light" step="0.01" required>
         </div>
-        
-        <!-- Event Date -->
         <div class="col-md-4">
-            <label class="form-label">Event Date</label>
+            <label class="form-label">Event Date <span class="text-danger">*</span></label>
             <input type="datetime-local" name="event_date" class="form-control bg-dark text-light" required>
         </div>
-        
-        <!-- Deadline -->
         <div class="col-md-4">
-            <label class="form-label">Deadline</label>
+            <label class="form-label">Deadline <span class="text-danger">*</span></label>
             <input type="datetime-local" name="deadline" class="form-control bg-dark text-light" required>
         </div>
-        
-        <!-- Picture URL -->
         <div class="col-12">
             <label class="form-label">Picture URL (optional)</label>
             <input type="url" name="picture_url" class="form-control bg-dark text-light" placeholder="https://example.com/image.jpg">
         </div>
-        
-        <!-- Background Image -->
         <div class="col-12">
             <label class="form-label">Background Image URL (optional)</label>
             <input type="url" name="background_image_url" class="form-control bg-dark text-light" placeholder="https://example.com/bg.jpg">
         </div>
-        
         <h5 class="golden-text mt-3">💳 Payment Details</h5>
-
-        <!-- ⭐ ACCOUNT NAME - MANDATORY ⭐ -->
         <div class="col-md-12">
             <label class="form-label">Account Name (M-Pesa/Bank Account Holder) <span class="text-danger">*</span></label>
             <input type="text" name="account_name" class="form-control bg-dark text-light" placeholder="e.g. Alex Kiprop" required>
@@ -71,8 +53,6 @@
                 <strong>Important:</strong> The system will use this name to verify payments.
             </div>
         </div>
-        
-        <!-- Payment Methods -->
         <div class="col-md-3">
             <label class="form-label">Paybill</label>
             <input type="text" name="paybill" class="form-control bg-dark text-light">
@@ -89,8 +69,6 @@
             <label class="form-label">WhatsApp Contact</label>
             <input type="text" name="whatsapp_contact" class="form-control bg-dark text-light">
         </div>
-        
-        <!-- Bank Details -->
         <div class="col-md-4">
             <label class="form-label">Bank Name</label>
             <input type="text" name="bank_name" class="form-control bg-dark text-light">
@@ -103,14 +81,10 @@
             <label class="form-label">Bank Account Number</label>
             <input type="text" name="bank_account_number" class="form-control bg-dark text-light">
         </div>
-        
-        <!-- Payment Instructions -->
         <div class="col-12">
             <label class="form-label">Payment Instructions</label>
             <textarea name="payment_instructions" class="form-control bg-dark text-light" rows="2"></textarea>
         </div>
-        
-        <!-- Grace Period -->
         <div class="col-md-6">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="has_grace_period" value="1">
@@ -121,8 +95,6 @@
             <label class="form-label">Grace Period (days)</label>
             <input type="number" name="grace_period" class="form-control bg-dark text-light" value="0">
         </div>
-        
-        <!-- Submit -->
         <div class="col-12">
             <button type="submit" class="btn btn-gold">🚀 Create Event</button>
             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
