@@ -35,7 +35,12 @@
         <tbody>
         {% for c in contributors.items %}
         <tr>
-            <td>{{ c.name }}</td>
+            <td>
+                {{ c.name }}
+                {% if c.username %}
+                <span class="badge bg-info text-dark">👤 {{ c.username }}</span>
+                {% endif %}
+            </td>
             <td>{{ c.phone }}</td>
             <td>KES {{ c.pledge_amount|round(2) }}</td>
             <td>KES {{ c.paid_amount|round(2) }}</td>
