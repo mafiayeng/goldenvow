@@ -39,7 +39,7 @@
     </div>
 </div>
 
-<!-- 🔥 Withdrawal Section - Only if fees >= 50 -->
+<!-- Withdrawal Section -->
 <div class="glass-card p-3 mb-4">
     <div class="d-flex justify-content-between align-items-center">
         <div>
@@ -60,7 +60,7 @@
 
 <!-- Quick Actions -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <a href="{{ url_for('manage_admins') }}" class="text-decoration-none">
             <div class="glass-card p-3 text-center">
                 <i class="bi bi-people fs-2 golden-text"></i>
@@ -68,7 +68,7 @@
             </div>
         </a>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <a href="{{ url_for('withdrawals') }}" class="text-decoration-none">
             <div class="glass-card p-3 text-center">
                 <i class="bi bi-arrow-up-circle fs-2 golden-text"></i>
@@ -76,11 +76,19 @@
             </div>
         </a>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <a href="{{ url_for('settings') }}" class="text-decoration-none">
             <div class="glass-card p-3 text-center">
                 <i class="bi bi-gear fs-2 golden-text"></i>
                 <p>System Settings</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('manage_feature_requests') }}" class="text-decoration-none">
+            <div class="glass-card p-3 text-center">
+                <i class="bi bi-lightbulb fs-2 golden-text"></i>
+                <p>Feature Requests</p>
             </div>
         </a>
     </div>
@@ -138,7 +146,15 @@
     <div class="glass-card p-3">
         <h5 class="golden-text">🔒 Locked Events ({{ locked_events }})</h5>
         <p class="text-muted-light">These events are locked because fees (>= 50 bob) are overdue.</p>
-        <a href="{{ url_for('super_dashboard') }}" class="btn btn-sm btn-outline-gold">View All</a>
+        {% for event in events if event.disabled %}
+        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
+            <span>{{ event.title }}</span>
+            <span class="text-muted-light small">Fee: KES {{ get_event_total_fee(event.id)|round(2) }}</span>
+            <form method="POST" action="{{ url_for('pay_event_fee', token=event.token) }}">
+                <button type="submit" class="btn btn-sm btn-gold">Mark Paid</button>
+            </form>
+        </div>
+        {% endfor %}
     </div>
 </div>
 {% endif %}
