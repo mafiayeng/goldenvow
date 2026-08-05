@@ -117,7 +117,6 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('create_event') }}"><i class="bi bi-plus-circle"></i> New</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_chat_list') }}"><i class="bi bi-chat-dots"></i> Chat</a></li>
-                        <!-- 🔥 HELP LINK ADDED -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('help_page') }}"><i class="bi bi-question-circle"></i> Help</a></li>
                         {% if get_admin() and get_admin().is_super_admin %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('super_dashboard') }}">Super</a></li>
@@ -137,8 +136,8 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('profile') }}"><i class="bi bi-person"></i></a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i></a></li>
                     {% else %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Login</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Register</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Admin Login</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_login') }}">Contributor Login</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('contact') }}">Contact</a></li>
                     {% endif %}
                 </ul>
