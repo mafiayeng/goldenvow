@@ -1,17 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Register{% endblock %}
+{% block title %}Admin Register{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-5">
         <div class="glass-card p-4">
-            <h3 class="text-center golden-text">✦ Create Account</h3>
+            <h3 class="text-center golden-text">✦ Create Admin Account</h3>
+            <p class="text-muted-light text-center">Register to start creating events and managing contributions.</p>
+            <hr>
             <form method="POST">
                 <div class="mb-2">
-                    <label class="form-label">Username</label>
+                    <label class="form-label">Username <span class="text-danger">*</span></label>
                     <input type="text" name="username" class="form-control bg-dark text-light" required>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label">Email</label>
+                    <label class="form-label">Email <span class="text-danger">*</span></label>
                     <input type="email" name="email" class="form-control bg-dark text-light" required>
                 </div>
                 <div class="mb-2">
@@ -19,7 +21,7 @@
                     <input type="tel" name="phone" class="form-control bg-dark text-light">
                 </div>
                 <div class="mb-2">
-                    <label class="form-label">Password</label>
+                    <label class="form-label">Password <span class="text-danger">*</span></label>
                     <input type="password" name="password" class="form-control bg-dark text-light" required>
                 </div>
                 <div class="mb-2">
