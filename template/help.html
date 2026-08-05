@@ -2,58 +2,354 @@
 {% block title %}Admin Help & Guide{% endblock %}
 {% block content %}
 <div class="glass-card p-4">
-    <h1 class="golden-text text-center">📖 Admin Guide – GoldenVow</h1>
-    <p class="text-muted-light text-center">Everything you need to know to manage your fundraising events.</p>
+    <h1 class="golden-text text-center">📖 GoldenVow – Complete Admin Guide</h1>
+    <p class="text-muted-light text-center">Everything you need to know about managing your fundraising platform.</p>
     <hr>
 
-    <!-- 👑 SUPER ADMIN -->
+    <!-- ============================================================ -->
+    <!-- SECTION 1: ROLES & RESPONSIBILITIES -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">👑 1. Roles & Responsibilities</h4>
+    
     <div class="alert alert-success bg-dark text-light" style="border-left: 4px solid var(--gold);">
-        <h5 class="golden-text">👑 You Are the Super Admin!</h5>
-        <p><strong>What you earn:</strong> <span class="golden-text">2% platform fee</span> from EVERY contribution across ALL events.</p>
-        <p><strong>Minimum withdrawal:</strong> Fees must reach at least <strong>KES 50</strong> before you can withdraw.</p>
-        <p><strong>What you control:</strong> Approve withdrawals, manage admins, lock/unlock events, system settings.</p>
+        <h5 class="golden-text">Super Admin (You)</h5>
+        <ul class="mb-0">
+            <li>✅ Earns <strong>2% platform fee</strong> from EVERY contribution across ALL events</li>
+            <li>✅ Approves or rejects <strong>withdrawal requests</strong> from all admins</li>
+            <li>✅ <strong>Manages admins</strong> – enable, disable, or delete admin accounts</li>
+            <li>✅ <strong>Locks/unlocks events</strong> – marks fee as paid to unlock events</li>
+            <li>✅ <strong>System settings</strong> – maintenance mode, custom messages</li>
+            <li>✅ <strong>Feature requests</strong> – reviews and responds to all suggestions</li>
+            <li>✅ <strong>Contact messages</strong> – reads and replies to all messages</li>
+            <li>❌ <strong>Cannot approve contributions</strong> – that's the Admin's job</li>
+        </ul>
     </div>
 
-    <!-- 🧑‍💼 ADMIN -->
     <div class="alert alert-info bg-dark text-light" style="border-left: 4px solid #3498db;">
         <h5 class="text-info">🧑‍💼 Admins</h5>
-        <p><strong>What they earn:</strong> The FULL pledge amount from contributors (the 2% fee goes to Super Admin).</p>
-        <p><strong>What they do:</strong> Create events, manage contributors, approve/decline payments.</p>
-        <p><strong>Event Locking:</strong> If your event's total fee reaches KES 50+ and you don't pay within 3 days, the event locks.</p>
+        <ul class="mb-0">
+            <li>✅ Create and manage <strong>events</strong></li>
+            <li>✅ <strong>Approve/decline</strong> contributions from contributors</li>
+            <li>✅ <strong>Verify payment proofs</strong> – check screenshots and approve</li>
+            <li>✅ <strong>Chat</strong> with contributors privately</li>
+            <li>✅ <strong>Request withdrawal</strong> of their own money (the pledge amounts)</li>
+            <li>❌ <strong>Cannot withdraw the 2% fee</strong> – that goes to Super Admin</li>
+            <li>❌ <strong>Cannot manage other admins</strong> – only Super Admin can</li>
+        </ul>
+    </div>
+
+    <div class="alert alert-secondary bg-dark text-light" style="border-left: 4px solid #6c757d;">
+        <h5 class="text-light">👤 Contributors</h5>
+        <ul class="mb-0">
+            <li>✅ <strong>Register</strong> with username and password</li>
+            <li>✅ <strong>Login</strong> to view their own contributions</li>
+            <li>✅ <strong>Submit payment proof</strong> – upload screenshots</li>
+            <li>✅ <strong>Chat</strong> with admins privately</li>
+            <li>✅ <strong>Download receipts</strong> – only after 7 days (admins can download anytime)</li>
+            <li>✅ <strong>Suggest features</strong> – share ideas to improve the platform</li>
+            <li>❌ <strong>Cannot see other contributors' payments</strong> – only their own</li>
+        </ul>
     </div>
 
     <hr>
 
-    <h4 class="golden-text mt-4">🔄 The Complete Money Flow</h4>
-    <ol>
-        <li><strong>Contributor sends money</strong> to the admin's account</li>
-        <li><strong>Admin approves</strong> the contribution on the system</li>
-        <li><strong>System deducts 2%</strong> – this goes to Super Admin</li>
-        <li><strong>Admin gets the full amount</strong> from the contributor</li>
-        <li><strong>Super Admin accumulates</strong> ALL 2% fees from ALL events</li>
-        <li><strong>Super Admin withdraws</strong> when fees reach KES 50+</li>
-    </ol>
+    <!-- ============================================================ -->
+    <!-- SECTION 2: MONEY FLOW -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">💰 2. Complete Money Flow</h4>
+    
+    <div class="glass-card p-3">
+        <ol class="text-light">
+            <li><strong>Contributor pledges</strong> – They promise to send a certain amount.</li>
+            <li><strong>Contributor sends money</strong> – They send the actual amount to the admin's account (Paybill, M-Pesa, or Bank).</li>
+            <li><strong>Contributor uploads proof</strong> – They upload a screenshot of the payment.</li>
+            <li><strong>System auto-verifies</strong> – The system compares the sender name (from the screenshot) with the Account Name set by the admin.</li>
+            <li><strong>Admin reviews and approves</strong> – Admin checks the screenshot and clicks "Approve".</li>
+            <li><strong>System deducts 2% fee</strong> – This fee goes to the Super Admin.</li>
+            <li><strong>Admin gets the full amount</strong> – Admin receives the full pledge amount from the contributor.</li>
+            <li><strong>Super Admin accumulates fees</strong> – All 2% fees from ALL events go to Super Admin.</li>
+            <li><strong>Super Admin withdraws</strong> – When fees reach KES 50+, Super Admin can withdraw.</li>
+        </ol>
+    </div>
 
-    <h4 class="golden-text mt-4">📌 Important Rules</h4>
-    <ul>
-        <li><strong>Event Locking:</strong> Events lock if total fee reaches KES 50 and is NOT paid within 3 days.</li>
-        <li><strong>When Locked:</strong> NO ONE can access the event – not even the admin.</li>
-        <li><strong>Unlocking:</strong> Admin pays Super Admin, then clicks "Request Unlock".</li>
-        <li><strong>Super Admin Withdrawal:</strong> Only withdraw when fees reach KES 50 or more.</li>
-        <li><strong>Contributor Receipts:</strong> Contributors can only download after 7 days. Admins can download anytime.</li>
-    </ul>
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <div class="glass-card p-3 text-center">
+                <h5 class="golden-text">Admin Gets</h5>
+                <h3 class="text-success">KES 1,000</h3>
+                <small>Full pledge amount</small>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="glass-card p-3 text-center">
+                <h5 class="golden-text">Super Admin Gets</h5>
+                <h3 class="text-warning">KES 20</h3>
+                <small>2% fee (KES 1,000 × 2%)</small>
+            </div>
+        </div>
+    </div>
 
-    <h4 class="golden-text mt-4">👥 Contributor Accounts</h4>
-    <ul>
-        <li><strong>Contributors can register</strong> with username and password</li>
-        <li><strong>They can login</strong> to see their own contributions</li>
-        <li><strong>They can download receipts</strong> only after 7 days</li>
-        <li><strong>Admins can download</strong> any receipt anytime</li>
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 3: EVENT CREATION -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">⚙️ 3. Creating an Event</h4>
+    
+    <div class="glass-card p-3">
+        <h5 class="golden-text">Step-by-Step:</h5>
+        <ol class="text-light">
+            <li>Go to <strong>Dashboard → New Event</strong></li>
+            <li>Select <strong>Event Type</strong> – Dowry, Burial, Medical, Education, Harambee, or Other</li>
+            <li>Enter <strong>Event Title</strong> and <strong>Description</strong></li>
+            <li>Set <strong>Target Amount</strong> – your fundraising goal</li>
+            <li>Set <strong>Event Date</strong> and <strong>Deadline</strong></li>
+            <li><span class="golden-text">⭐ IMPORTANT:</span> Enter the <strong>Account Name</strong> – this is the name contributors will send money to</li>
+            <li>Add <strong>Payment Details</strong> – Paybill, M-Pesa number, Bank details, etc.</li>
+            <li>Optionally enable <strong>Grace Period</strong> – gives extra time for fee payment</li>
+            <li>Click <strong>Create Event</strong></li>
+        </ol>
+    </div>
+
+    <div class="alert alert-warning bg-dark text-light mt-2">
+        <i class="bi bi-exclamation-triangle golden-text"></i>
+        <strong>⚠️ Account Name is Critical!</strong>
+        <br>If you set Account Name as "Alex Kiprop", contributors will see "Send money to: Alex Kiprop". The system will auto-verify if the sender name matches.
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 4: CONTRIBUTOR MANAGEMENT -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">👥 4. Managing Contributors</h4>
+
+    <div class="glass-card p-3">
+        <h5 class="golden-text">How the System Handles Contributions:</h5>
+        <ol class="text-light">
+            <li><strong>Contributor registers</strong> – They create an account with username and password</li>
+            <li><strong>Contributor pledges</strong> – They enter their pledge amount</li>
+            <li><strong>Contributor sends money</strong> – They send money to the Account Name you provided</li>
+            <li><strong>Contributor uploads proof</strong> – They upload a screenshot of the payment</li>
+            <li><strong>System auto-verifies</strong> – ✅ Green tick if sender name matches Account Name</li>
+            <li><strong>Admin reviews</strong> – Check the screenshot to confirm the money was sent</li>
+            <li><strong>Admin approves</strong> – Click "Approve" and enter the actual amount received</li>
+            <li><strong>Contribution is approved</strong> – Status changes to "Approved"</li>
+        </ol>
+    </div>
+
+    <div class="row mt-2">
+        <div class="col-md-6">
+            <div class="glass-card p-2 text-center">
+                <span class="badge bg-success">✅ Name Match</span>
+                <small class="d-block text-muted-light">System auto-verified</small>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="glass-card p-2 text-center">
+                <span class="badge bg-danger">❌ Name Mismatch</span>
+                <small class="d-block text-muted-light">Admin must review manually</small>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 5: FEES & EARNINGS -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">💰 5. Fees & Earnings</h4>
+
+    <div class="glass-card p-3">
+        <h5 class="golden-text">Platform Fee (2%)</h5>
+        <ul class="text-light">
+            <li><strong>Who earns it:</strong> Super Admin (You)</li>
+            <li><strong>How it's calculated:</strong> 2% of the ACTUAL amount received (not the pledge)</li>
+            <li><strong>Example:</strong> If contributor sends KES 800, fee = 2% × 800 = KES 16</li>
+            <li><strong>Minimum withdrawal:</strong> Fees must reach KES 50 before you can withdraw</li>
+        </ul>
+    </div>
+
+    <div class="glass-card p-3 mt-2">
+        <h5 class="golden-text">Referral Bonus (Lower Fees)</h5>
+        <table class="table table-dark table-sm">
+            <thead>
+                <tr>
+                    <th>Referrals</th>
+                    <th>Fee %</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>0</td><td>2.00%</td></tr>
+                <tr><td>1</td><td>1.80%</td></tr>
+                <tr><td>2-3</td><td>1.72%</td></tr>
+                <tr><td>4-8</td><td>1.61%</td></tr>
+                <tr><td>9+</td><td>1.54%</td></tr>
+            </tbody>
+        </table>
+        <small class="text-muted-light">Admins who refer others get lower fees!</small>
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 6: EVENT LOCKING -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">🔒 6. Event Locking</h4>
+
+    <div class="glass-card p-3">
+        <h5 class="golden-text">When Does an Event Lock?</h5>
+        <ul class="text-light">
+            <li><strong>Condition 1:</strong> The total fee for the event reaches <strong>KES 50 or more</strong></li>
+            <li><strong>Condition 2:</strong> 3 days have passed since the first contribution</li>
+            <li><strong>Condition 3:</strong> The fee has NOT been paid</li>
+        </ul>
+    </div>
+
+    <div class="alert alert-danger bg-dark text-light mt-2">
+        <i class="bi bi-lock golden-text"></i>
+        <strong>When Locked, NO ONE can access the event!</strong>
+        <br>Not even the admin! Only the "Contact Super Admin to Pay Fee" page is visible.
+    </div>
+
+    <div class="glass-card p-3 mt-2">
+        <h5 class="golden-text">How to Unlock an Event</h5>
+        <ol class="text-light">
+            <li><strong>Admin pays the fee</strong> to Super Admin (outside the system)</li>
+            <li><strong>Admin clicks "Request Unlock"</strong> on the locked event page</li>
+            <li><strong>Super Admin gets notified</strong> and goes to Super Dashboard</li>
+            <li><strong>Super Admin clicks "Mark Paid"</strong> on the event</li>
+            <li><strong>Event is unlocked!</strong> Everyone can access it again</li>
+        </ol>
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 7: WITHDRAWALS -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">📤 7. Withdrawals</h4>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="glass-card p-3">
+                <h5 class="golden-text">For Admins</h5>
+                <ul class="text-light">
+                    <li>Admins can request withdrawal of their own money</li>
+                    <li>They click "Request Withdrawal" on their dashboard</li>
+                    <li>Super Admin approves and pays them</li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="glass-card p-3">
+                <h5 class="golden-text">For Super Admin (You)</h5>
+                <ul class="text-light">
+                    <li>You earn 2% from ALL events</li>
+                    <li>You can withdraw when fees reach KES 50+</li>
+                    <li>Go to Super Dashboard → Request Withdrawal</li>
+                    <li>You approve your own withdrawal</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-success bg-dark text-light mt-2">
+        <i class="bi bi-check-circle-fill golden-text"></i>
+        <strong>Minimum Withdrawal:</strong> KES 50 (standard M-Pesa minimum)
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 8: CONTRIBUTOR RECEIPTS -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">📄 8. Receipts</h4>
+
+    <div class="glass-card p-3">
+        <ul class="text-light">
+            <li><strong>Contributors:</strong> Can download receipt <strong>only after 7 days</strong> of approval</li>
+            <li><strong>Admins:</strong> Can download any receipt <strong>anytime</strong></li>
+            <li><strong>Why 7 days?</strong> Gives time for verification and prevents abuse</li>
+        </ul>
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 9: CHAT -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">💬 9. Chat</h4>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="glass-card p-3">
+                <h5 class="golden-text">Public Chat</h5>
+                <ul class="text-light">
+                    <li>On the event landing page</li>
+                    <li>Anyone can send messages</li>
+                    <li>Shown to all visitors</li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="glass-card p-3">
+                <h5 class="golden-text">Private Chat</h5>
+                <ul class="text-light">
+                    <li>1-on-1 between admin and contributor</li>
+                    <li>Admins: Go to "Chat" tab in navbar</li>
+                    <li>Contributors: Click "Chat with Admin" on their view page</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 10: FEATURE REQUESTS -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">💡 10. Feature Requests</h4>
+
+    <ul class="text-light">
+        <li><strong>Contributors</strong> can suggest new features from any event page</li>
+        <li><strong>Super Admin</strong> can view, approve, or decline suggestions</li>
+        <li>Go to <strong>Super Dashboard → Manage Feature Requests</strong></li>
     </ul>
 
     <hr>
-    <p class="text-center text-muted-light">Need help? Contact support: {{ support_whatsapp }} or {{ support_email }}</p>
-    <div class="text-center">
+
+    <!-- ============================================================ -->
+    <!-- SECTION 11: MAINTENANCE MODE -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">🛠️ 11. Maintenance Mode</h4>
+
+    <ul class="text-light">
+        <li><strong>Super Admin only</strong> can enable maintenance mode</li>
+        <li>Go to <strong>Settings</strong> → Toggle Maintenance Mode</li>
+        <li>Add a <strong>custom message</strong> and <strong>estimated return time</strong></li>
+        <li>Super Admin can <strong>still access</strong> the system during maintenance</li>
+    </ul>
+
+    <hr>
+
+    <!-- ============================================================ -->
+    <!-- SECTION 12: SUPPORT -->
+    <!-- ============================================================ -->
+    <h4 class="golden-text mt-4">📞 12. Support</h4>
+
+    <div class="glass-card p-3">
+        <ul class="text-light">
+            <li><strong>WhatsApp:</strong> {{ support_whatsapp }}</li>
+            <li><strong>Email:</strong> {{ support_email }}</li>
+            <li><strong>Contact Super Admin:</strong> Click "Contact Super Admin" on dashboard</li>
+        </ul>
+    </div>
+
+    <hr>
+
+    <div class="text-center mt-3">
+        <p class="text-muted-light">Need more help? Reach out to the Super Admin or support team.</p>
         <a href="{{ url_for('super_dashboard') if get_admin().is_super_admin else url_for('dashboard') }}" class="btn btn-gold">
             ← Back to Dashboard
         </a>
