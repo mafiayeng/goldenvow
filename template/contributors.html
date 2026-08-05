@@ -26,8 +26,8 @@
                 <th>Name</th>
                 <th>Phone</th>
                 <th>Pledge</th>
+                <th>Paid</th>
                 <th>Fee</th>
-                <th>Net</th>
                 <th>Status</th>
                 <th>Action</th>
             </tr>
@@ -38,26 +38,42 @@
             <td>{{ c.name }}</td>
             <td>{{ c.phone }}</td>
             <td>KES {{ c.pledge_amount|round(2) }}</td>
+            <td>KES {{ c.paid_amount|round(2) }}</td>
             <td>KES {{ c.fee_amount|round(2) }}</td>
-            <td>KES {{ c.net_contribution|round(2) }}</td>
             <td>
                 <span class="badge bg-{{ 'success' if c.status == 'approved' else 'warning' if c.status == 'pending' else 'danger' }}">
                     {{ c.status|title }}
                 </span>
+                {% if c.auto_verified %}
+                <span class="badge bg-success">🤖 System Verified</span>
+                {% endif %}
+                {% if c.status == 'pending' and c.sender_name %}
+                    {% if c.sender_name.lower().strip() == event.account_name.lower().strip() %}
+                    <span class="badge bg-success">✅ Name Match</span>
+                    {% else %}
+                    <span class="badge bg-danger">❌ Name Mismatch</span>
+                    {% endif %}
+                {% endif %}
             </td>
             <td>
+                {% if c.payment_proof_screenshot %}
+                <a href="{{ url_for('static', filename=c.payment_proof_screenshot.replace('static/', '')) }}" target="_blank" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-image"></i> View Proof
+                </a>
+                {% endif %}
+                
                 {% if c.status == 'pending' %}
-                <!-- Approve Form -->
                 <form method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" class="d-inline">
                     <input type="number" name="received_amount" placeholder="Amount received" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;" step="0.01" required>
                     <button type="submit" class="btn btn-sm btn-success">✅ Approve</button>
                 </form>
-                <!-- Decline Form -->
+                
                 <form method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" class="d-inline">
                     <input type="text" name="reason" placeholder="Reason" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;">
                     <button type="submit" class="btn btn-sm btn-danger">❌ Decline</button>
                 </form>
                 {% endif %}
+                
                 <a href="{{ url_for('contributor_view', token=c.token) }}" class="btn btn-sm btn-outline-info">View</a>
             </td>
         </tr>
