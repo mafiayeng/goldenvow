@@ -3,13 +3,11 @@
 {% block content %}
 <div class="text-center mb-4">
     <div class="glass-card p-4">
-        <!-- Auto-generated logo -->
         <div class="mb-3">{{ generate_event_logo(event, 100)|safe }}</div>
         <h1 class="golden-text">{{ event.title }}</h1>
         <p class="text-muted-light">{{ event.event_type|title }} • {{ event.event_date.strftime('%B %d, %Y') }}</p>
         <p>{{ event.description }}</p>
 
-        <!-- Progress Bar -->
         <div class="progress" style="height:25px;">
             <div class="progress-bar progress-bar-gold" id="progressBar" style="width:{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;">
                 <span id="progressText">{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%</span>
@@ -22,6 +20,44 @@
 
 <!-- Daily Note -->
 <div class="alert glass-card text-center">{{ daily_note }}</div>
+
+<!-- ⭐ ACCOUNT NAME - PUBLIC ⭐ -->
+<div class="glass-card p-3 mb-3">
+    <h5 class="golden-text">💰 Payment Instructions</h5>
+    {% if event.account_name %}
+    <div class="alert alert-success bg-dark text-light" style="border-left: 4px solid var(--gold);">
+        <i class="bi bi-person-check golden-text"></i> 
+        <strong>Send money to:</strong> <span class="golden-text fs-5">{{ event.account_name }}</span>
+        <br><small class="text-muted-light">Please use this exact name when sending money.</small>
+    </div>
+    {% endif %}
+
+    {{ event.payment_instructions or 'Contact the organiser for payment details.' }}
+    {% if event.paybill %}<p><strong>Paybill:</strong> {{ event.paybill }}</p>{% endif %}
+    {% if event.mpesa_number %}<p><strong>M-Pesa:</strong> {{ event.mpesa_number }}</p>{% endif %}
+    {% if event.till_number %}<p><strong>Till:</strong> {{ event.till_number }}</p>{% endif %}
+    <p class="text-muted-light small">Fee: {{ fee_percentage }}% of contribution.</p>
+</div>
+
+<!-- Submit Payment Proof -->
+<div class="glass-card p-3 mb-3">
+    <h5 class="golden-text">📎 Submit Payment Proof</h5>
+    <form method="POST" action="{{ url_for('submit_payment_proof', token=event.token) }}" enctype="multipart/form-data">
+        <div class="mb-2">
+            <label class="form-label">Your Name (as registered)</label>
+            <input type="text" name="contributor_name" class="form-control bg-dark text-light" value="{{ contributor_name }}" readonly>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Payment Screenshot</label>
+            <input type="file" name="screenshot" class="form-control bg-dark text-light" accept="image/*">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Additional Info (transaction code, etc.)</label>
+            <textarea name="payment_proof_text" class="form-control bg-dark text-light" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-gold">Submit Proof</button>
+    </form>
+</div>
 
 <!-- Chat -->
 <div class="glass-card p-3 mb-3">
@@ -52,14 +88,11 @@
     </form>
 </div>
 
-<!-- Payment Instructions -->
-<div class="glass-card p-3">
-    <h5 class="golden-text">💰 Payment Instructions</h5>
-    {{ event.payment_instructions or 'Contact the organiser for payment details.' }}
-    {% if event.paybill %}<p><strong>Paybill:</strong> {{ event.paybill }}</p>{% endif %}
-    {% if event.mpesa_number %}<p><strong>M-Pesa:</strong> {{ event.mpesa_number }}</p>{% endif %}
-    {% if event.till_number %}<p><strong>Till:</strong> {{ event.till_number }}</p>{% endif %}
-    <p class="text-muted-light small">Fee: {{ fee_percentage }}% of contribution.</p>
+<!-- Suggest Feature -->
+<div class="text-center mt-3">
+    <a href="{{ url_for('submit_feature_request', event_token=event.token) }}" class="btn btn-outline-gold">
+        <i class="bi bi-lightbulb"></i> Suggest a New Feature
+    </a>
 </div>
 
 {% block scripts %}
@@ -67,7 +100,6 @@
     const eventToken = '{{ event.token }}';
     socket.emit('join_event', { event_token: eventToken });
     
-    // Update progress in real-time
     socket.on('total_updated', function(data) {
         document.getElementById('totalRaised').innerText = 'KES ' + data.total.toFixed(2);
         const percent = (data.total / {{ event.target_amount }}) * 100;
@@ -75,7 +107,6 @@
         document.getElementById('progressText').innerText = Math.min(percent, 100).toFixed(0) + '%';
     });
 
-    // Live chat via socket
     socket.on('new_chat', function(data) {
         const chatDiv = document.getElementById('chatMessages');
         const msg = document.createElement('div');
@@ -84,7 +115,6 @@
         chatDiv.scrollTop = chatDiv.scrollHeight;
     });
 
-    // Handle chat form
     document.getElementById('chatForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const name = document.getElementById('chatName').value || 'Anonymous';
