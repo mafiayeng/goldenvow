@@ -4,17 +4,38 @@
 <div class="glass-card p-4">
     <h2 class="golden-text">👤 {{ contrib.name }}</h2>
     <p><strong>Phone:</strong> {{ contrib.phone }}</p>
-    <p><strong>Pledge:</strong> KES {{ contrib.pledge_amount|round(2) }}</p>
-    <p><strong>Fee:</strong> KES {{ contrib.fee_amount|round(2) }}</p>
+    <p><strong>Username:</strong> {{ contrib.username or 'Not registered' }}</p>
+    <p><strong>Pledge Amount:</strong> KES {{ contrib.pledge_amount|round(2) }}</p>
+    <p><strong>Amount Paid:</strong> KES {{ contrib.paid_amount|round(2) }}</p>
+    <p><strong>Fee (2%):</strong> KES {{ contrib.fee_amount|round(2) }}</p>
     <p><strong>Net Contribution:</strong> KES {{ contrib.net_contribution|round(2) }}</p>
+    <p><strong>Sender Name (from proof):</strong> {{ contrib.sender_name or 'Not provided' }}</p>
+    
     <p><strong>Status:</strong>
         <span class="badge bg-{{ 'success' if contrib.status == 'approved' else 'warning' if contrib.status == 'pending' else 'danger' }}">
             {{ contrib.status|title }}
         </span>
+        {% if contrib.auto_verified %}
+        <span class="badge bg-success">🤖 System Verified</span>
+        {% endif %}
     </p>
-    {% if contrib.status == 'declined' and contrib.decline_reason %}
-    <div class="alert alert-danger">
-        <strong>Declined Reason:</strong> {{ contrib.decline_reason }}
+    
+    {% if contrib.status == 'pending' %}
+    <div class="alert alert-warning">
+        <i class="bi bi-clock"></i> Your contribution is pending admin approval.
+        {% if contrib.sender_name and contrib.sender_name.lower().strip() == event.account_name.lower().strip() %}
+        <br>✅ The system has verified your name matches the account.
+        {% elif contrib.sender_name %}
+        <br>⚠️ Your sender name doesn't match the account name. Admin will review.
+        {% endif %}
+    </div>
+    {% elif contrib.status == 'approved' and contrib.auto_verified %}
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle-fill"></i> ✅ Your payment was system-verified and approved!
+    </div>
+    {% elif contrib.status == 'approved' %}
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle"></i> ✅ Your contribution has been approved by the admin.
     </div>
     {% endif %}
 </div>
@@ -24,16 +45,28 @@
     <h5 class="golden-text">📎 Submit Payment Proof</h5>
     <form method="POST" action="{{ url_for('submit_payment_proof', token=contrib.token) }}" enctype="multipart/form-data">
         <div class="mb-2">
-            <label class="form-label">Screenshot (optional)</label>
+            <label class="form-label">Payment Screenshot</label>
             <input type="file" name="screenshot" class="form-control bg-dark text-light" accept="image/*">
         </div>
         <div class="mb-2">
-            <label class="form-label">Text proof (transaction code, etc.)</label>
+            <label class="form-label">Additional Info (transaction code, etc.)</label>
             <textarea name="payment_proof_text" class="form-control bg-dark text-light" rows="2">{{ contrib.payment_proof_text or '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-gold">Submit Proof</button>
     </form>
 </div>
+
+<!-- Show screenshot if uploaded -->
+{% if contrib.payment_proof_screenshot %}
+<div class="glass-card p-4 mt-3">
+    <h5 class="golden-text">📸 Your Payment Screenshot</h5>
+    <a href="{{ url_for('static', filename=contrib.payment_proof_screenshot.replace('static/', '')) }}" target="_blank">
+        <img src="{{ url_for('static', filename=contrib.payment_proof_screenshot.replace('static/', '')) }}" 
+             alt="Payment proof" style="max-width:100%; max-height:300px; border-radius:12px; border:2px solid var(--gold);">
+    </a>
+    <p class="text-muted-light small mt-1"><i class="bi bi-eye"></i> Click to view full size</p>
+</div>
+{% endif %}
 
 <!-- Payment History -->
 <div class="glass-card p-4 mt-3">
@@ -57,19 +90,28 @@
     {% endif %}
 </div>
 
-<!-- Receipt Download -->
+<!-- Receipt Download - Updated with Admin/Contributor Rules -->
 {% if contrib.status == 'approved' and contrib.completed_at %}
-    {% if (now - contrib.completed_at).days >= 7 %}
-    <div class="glass-card p-4 mt-3 text-center">
-        <a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold">
-            <i class="bi bi-file-pdf"></i> Download Receipt (PDF)
-        </a>
-    </div>
-    {% else %}
-    <div class="glass-card p-4 mt-3 text-center text-muted-light">
-        <i class="bi bi-clock"></i> Receipt will be available after 7 days.
-        <br><small>Contact the event admin if you need it earlier.</small>
-    </div>
+    {% if is_admin_user %}
+        <!-- 🔥 ADMIN CAN DOWNLOAD ANYTIME -->
+        <div class="glass-card p-4 mt-3 text-center">
+            <a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold">
+                <i class="bi bi-file-pdf"></i> Download Receipt (PDF) – Admin
+            </a>
+        </div>
+    {% elif is_contributor_owner and (now - contrib.completed_at).days >= 7 %}
+        <!-- 🔥 CONTRIBUTOR CAN DOWNLOAD AFTER 7 DAYS -->
+        <div class="glass-card p-4 mt-3 text-center">
+            <a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold">
+                <i class="bi bi-file-pdf"></i> Download Receipt (PDF)
+            </a>
+        </div>
+    {% elif is_contributor_owner %}
+        <!-- 🔥 CONTRIBUTOR MUST WAIT 7 DAYS -->
+        <div class="glass-card p-4 mt-3 text-center text-muted-light">
+            <i class="bi bi-clock"></i> Receipt will be available after 7 days.
+            <br><small>Contact the event admin if you need it earlier.</small>
+        </div>
     {% endif %}
 {% endif %}
 
@@ -81,6 +123,8 @@
 </div>
 
 <div class="mt-3 text-center">
-    <a href="{{ url_for('manage_contributors', token=event.token) }}" class="text-muted-light">← Back to Contributors</a>
+    <a href="{{ url_for('manage_contributors', token=event.token) if is_admin_user else url_for('contributor_dashboard') }}" class="text-muted-light">
+        ← Back to {{ 'Contributors' if is_admin_user else 'Dashboard' }}
+    </a>
 </div>
 {% endblock %}
