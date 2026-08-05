@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }}{% endblock %}
+{% block content %}
+<div class="text-center mb-4">
+    <div class="glass-card p-4">
+        <!-- Auto-generated logo -->
+        <div class="mb-3">{{ generate_event_logo(event, 100)|safe }}</div>
+        <h1 class="golden-text">{{ event.title }}</h1>
+        <p class="text-muted-light">{{ event.event_type|title }} • {{ event.event_date.strftime('%B %d, %Y') }}</p>
+        <p>{{ event.description }}</p>
+
+        <!-- Progress Bar -->
+        <div class="progress" style="height:25px;">
+            <div class="progress-bar progress-bar-gold" id="progressBar" style="width:{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;">
+                <span id="progressText">{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%</span>
+            </div>
+        </div>
+        <h3 id="totalRaised" class="mt-2 golden-text">KES {{ total_raised|round(2) }}</h3>
+        <p class="text-muted-light">Target: KES {{ event.target_amount|round(2) }} • Deadline: {{ event.deadline.strftime('%B %d, %Y at %H:%M') }}</p>
+    </div>
+</div>
+
+<!-- Daily Note -->
+<div class="alert glass-card text-center">{{ daily_note }}</div>
+
+<!-- Chat -->
+<div class="glass-card p-3 mb-3">
+    <h5 class="golden-text">💬 Live Chat</h5>
+    <div id="chatMessages" style="max-height:200px; overflow-y:auto;">
+        {% for msg in chat_messages %}
+        <div><strong>{{ msg.sender_name }}</strong>: {{ msg.message }} <small class="text-muted-light">{{ msg.timestamp.strftime('%H:%M') }}</small></div>
+        {% endfor %}
+    </div>
+    <form id="chatForm" class="d-flex mt-2">
+        <input type="text" id="chatName" class="form-control bg-dark text-light me-1" placeholder="Your name" style="max-width:150px;" value="Anonymous">
+        <input type="text" id="chatMessage" class="form-control bg-dark text-light me-1" placeholder="Message..." required>
+        <button type="submit" class="btn btn-gold">Send</button>
+    </form>
+</div>
+
+<!-- Testimonials -->
+<div class="glass-card p-3 mb-3">
+    <h5 class="golden-text">⭐ Testimonials</h5>
+    {% for t in testimonials %}
+    <div><strong>{{ t.message[:50] }}</strong> ({{ t.rating }}★) <small class="text-muted-light">{{ t.created_at.strftime('%d/%m') }}</small></div>
+    {% endfor %}
+    <form method="POST" action="{{ url_for('add_testimonial', token=event.token) }}" class="mt-2">
+        <input type="text" name="name" placeholder="Your name" class="form-control bg-dark text-light mb-1" required>
+        <input type="number" name="rating" min="1" max="5" placeholder="Rating 1-5" class="form-control bg-dark text-light mb-1" required>
+        <input type="text" name="message" placeholder="Your message" class="form-control bg-dark text-light mb-1" required>
+        <button type="submit" class="btn btn-sm btn-gold">Submit</button>
+    </form>
+</div>
+
+<!-- Payment Instructions -->
+<div class="glass-card p-3">
+    <h5 class="golden-text">💰 Payment Instructions</h5>
+    {{ event.payment_instructions or 'Contact the organiser for payment details.' }}
+    {% if event.paybill %}<p><strong>Paybill:</strong> {{ event.paybill }}</p>{% endif %}
+    {% if event.mpesa_number %}<p><strong>M-Pesa:</strong> {{ event.mpesa_number }}</p>{% endif %}
+    {% if event.till_number %}<p><strong>Till:</strong> {{ event.till_number }}</p>{% endif %}
+    <p class="text-muted-light small">Fee: {{ fee_percentage }}% of contribution.</p>
+</div>
+
+{% block scripts %}
+<script>
+    const eventToken = '{{ event.token }}';
+    socket.emit('join_event', { event_token: eventToken });
+    
+    // Update progress in real-time
+    socket.on('total_updated', function(data) {
+        document.getElementById('totalRaised').innerText = 'KES ' + data.total.toFixed(2);
+        const percent = (data.total / {{ event.target_amount }}) * 100;
+        document.getElementById('progressBar').style.width = Math.min(percent, 100) + '%';
+        document.getElementById('progressText').innerText = Math.min(percent, 100).toFixed(0) + '%';
+    });
+
+    // Live chat via socket
+    socket.on('new_chat', function(data) {
+        const chatDiv = document.getElementById('chatMessages');
+        const msg = document.createElement('div');
+        msg.innerHTML = `<strong>${data.sender}</strong>: ${data.message} <small class="text-muted-light">${data.time}</small>`;
+        chatDiv.appendChild(msg);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+    });
+
+    // Handle chat form
+    document.getElementById('chatForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('chatName').value || 'Anonymous';
+        const message = document.getElementById('chatMessage').value;
+        if (message.trim()) {
+            socket.emit('chat_message', { event_token: eventToken, sender_name: name, message: message });
+            document.getElementById('chatMessage').value = '';
+        }
+    });
+</script>
+{% endblock %}
