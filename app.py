@@ -1,4 +1,4 @@
-# ==================== app.py – COMPLETE WITH CONTRIBUTOR ACCOUNTS ====================
+# ==================== app.py – COMPLETE FINAL VERSION ====================
 import os, uuid, random, string, io, secrets
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
@@ -17,7 +17,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url if database_url else 'sqlit
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.permanent_session_lifetime = timedelta(days=30)
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# 🔥 SocketIO with threading mode – works on Render without eventlet
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # ---------- CONFIG ----------
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
@@ -79,12 +81,10 @@ class Event(db.Model):
 
 class Contributor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    # 🔥 New account fields
     username = db.Column(db.String(100), unique=True, nullable=True)
     password_hash = db.Column(db.String(200), nullable=True)
     last_login = db.Column(db.DateTime, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
-    # Existing fields
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
     token = db.Column(db.String(100), unique=True, nullable=False)
     pin = db.Column(db.String(4), nullable=False, default='0000')
@@ -205,12 +205,10 @@ class FeatureRequest(db.Model):
 # ---------- CREATE TABLES & MIGRATIONS ----------
 with app.app_context():
     db.create_all()
-    # Ensure settings
     for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
         if not Setting.query.filter_by(key=key).first():
             db.session.add(Setting(key=key, value=default))
             db.session.commit()
-    # Add new columns if missing
     try:
         inspector = inspect(db.engine)
         cols = [c['name'] for c in inspector.get_columns('contributor')]
@@ -322,7 +320,6 @@ def get_admin_total_fees(admin_id):
         total += get_event_total_fee(e.id)
     return total
 
-# 🔥 Updated: Event only locks if fee has reached 50 or above
 def is_fee_overdue(event):
     if not event.first_contribution_date:
         return False
@@ -353,12 +350,12 @@ def get_page_lock_status(event, contributor_token=None):
 
 def get_daily_note(event_type, day):
     notes = {
-        'dowry': ["🐂 Love unites two families...", "Every step brings them closer...", "A journey of love begins...", "Two families become one..."],
-        'burial': ["🕊️ In loving memory...", "Together we heal...", "A life remembered lives on...", "We mourn together..."],
-        'medical': ["❤️ Hope and healing...", "Your support saves lives...", "Strength comes from community...", "Every shilling brings hope..."],
-        'education': ["🎓 Building futures...", "Knowledge is power...", "Every child deserves a chance...", "Education transforms lives..."],
-        'harambee': ["🤝 Community strength...", "Together we achieve more...", "United we stand...", "Community is the foundation..."],
-        'other': ["✨ Great things happen...", "Your kindness matters...", "Together we make a difference...", "Every contribution counts..."]
+        'dowry': ["🐂 Love unites two families...", "Every step brings them closer..."],
+        'burial': ["🕊️ In loving memory...", "Together we heal..."],
+        'medical': ["❤️ Hope and healing...", "Your support saves lives..."],
+        'education': ["🎓 Building futures...", "Knowledge is power..."],
+        'harambee': ["🤝 Community strength...", "Together we achieve more..."],
+        'other': ["✨ Great things happen...", "Your kindness matters..."]
     }
     list = notes.get(event_type, notes['other'])
     return list[(day - 1) % len(list)]
@@ -620,7 +617,7 @@ def reset_password(token):
         return redirect(url_for('login'))
     return render_template('reset_password.html', token=token)
 
-# ---------- CONTRIBUTOR AUTH (NEW) ----------
+# ---------- CONTRIBUTOR AUTH ----------
 @app.route('/contributor/register', methods=['GET', 'POST'])
 def contributor_register():
     event_token = request.args.get('event_token', '')
@@ -712,8 +709,6 @@ def contributor_dashboard():
         session.pop('contributor_id', None)
         return redirect(url_for('contributor_login'))
     
-    # Get ALL contributions by this contributor (by name and phone)
-    # 🔥 They can only see their OWN contributions
     contributions = Contributor.query.filter_by(name=contrib.name, phone=contrib.phone).order_by(desc(Contributor.created_at)).all()
     
     return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions)
@@ -851,7 +846,6 @@ def event_landing(token):
     if get_page_lock_status(event):
         return render_template('event_locked.html', event=event)
     
-    # 🔥 Get logged-in contributor info if any
     contributor = None
     if is_contributor_logged_in():
         contributor = get_contributor()
@@ -1024,7 +1018,7 @@ def add_contributor(token):
         event.first_contribution_date = datetime.utcnow()
         db.session.commit()
     flash('Contributor added.', 'success')
-    return redirect(url_for('manage_contributors', token=token))
+    return redirect(url_for('manage_contributors', token=event.token))
 
 @app.route('/contributor/<token>')
 def contributor_view(token):
@@ -1040,7 +1034,6 @@ def contributor_view(token):
         db.session.add(conv)
         db.session.commit()
     
-    # 🔥 Check if viewer is admin or the contributor themselves
     is_admin_user = is_admin_logged_in()
     is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
     
@@ -1167,11 +1160,9 @@ def contributor_receipt(token):
         flash('Only approved contributions have receipts.', 'error')
         return redirect(url_for('contributor_view', token=token))
     
-    # 🔥 Check if viewer is admin or the contributor themselves
     is_admin_user = is_admin_logged_in()
     is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
     
-    # 🔥 Admin can download anytime. Contributor must wait 7 days.
     if not is_admin_user:
         if (datetime.utcnow() - contrib.completed_at).days < 7:
             flash('Receipt available after 7 days.', 'error')
@@ -1554,4 +1545,4 @@ scheduler.start()
 
 # ---------- MAIN ----------
 if __name__ == '__main__':
-    socketio.run(app, debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
