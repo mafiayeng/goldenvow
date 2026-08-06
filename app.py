@@ -393,6 +393,26 @@ def generate_event_logo(event, size=120):
     </svg>'''
     return svg
 
+# ---------- CONTEXT PROCESSOR (MAKES FUNCTIONS AVAILABLE IN ALL TEMPLATES) ----------
+@app.context_processor
+def utility_processor():
+    return dict(
+        is_admin_logged_in=is_admin_logged_in,
+        is_contributor_logged_in=is_contributor_logged_in,
+        get_admin=get_admin,
+        get_contributor=get_contributor,
+        get_unread_notifications=get_unread_notifications,
+        get_event_total_contributions=get_event_total_contributions,
+        get_event_total_fee=get_event_total_fee,
+        get_page_lock_status=get_page_lock_status,
+        generate_event_logo=generate_event_logo,
+        support_whatsapp=SUPPORT_WHATSAPP,
+        support_email=SUPPORT_EMAIL,
+        fee_percentage=SERVICE_FEE_PERCENTAGE,
+        minimum_withdrawal_fee=MINIMUM_WITHDRAWAL_FEE,
+        now=datetime.utcnow
+    )
+
 # ---------- BASE HTML STRING ----------
 BASE_HTML = """
 <!DOCTYPE html>
@@ -740,7 +760,7 @@ def event_landing(token):
         flash('Event inactive.', 'error')
         return redirect(url_for('dashboard'))
     if get_page_lock_status(event):
-        return render_template_string("""<h1>Event Locked</h1><p>Contact admin.</p>""")
+        return render_template_string("<h1>Event Locked</h1><p>Contact admin.</p>")
     contributor = None
     if is_contributor_logged_in():
         contributor = get_contributor()
