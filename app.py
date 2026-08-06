@@ -495,6 +495,15 @@ def emit_contribution_update(event_token):
         socketio.emit('total_updated', {'total': total, 'fee': fee}, room=event_token)
 
 # ---------- ROUTES ----------
+@app.route('/')
+def index():
+    if is_admin_logged_in():
+        admin = get_admin()
+        if admin.is_super_admin:
+            return redirect(url_for('super_dashboard'))
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
 @app.route('/force_maintenance_off')
 def force_maintenance_off():
     secret = request.args.get('secret')
@@ -713,15 +722,6 @@ def contributor_dashboard():
     return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions)
 
 # ---------- ADMIN DASHBOARDS ----------
-@app.route('/')
-def index():
-    if is_admin_logged_in():
-        admin = get_admin()
-        if admin.is_super_admin:
-            return redirect(url_for('super_dashboard'))
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
-
 @app.route('/dashboard')
 def dashboard():
     if not is_admin_logged_in():
