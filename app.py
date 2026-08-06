@@ -410,10 +410,11 @@ def utility_processor():
         support_email=SUPPORT_EMAIL,
         fee_percentage=SERVICE_FEE_PERCENTAGE,
         minimum_withdrawal_fee=MINIMUM_WITHDRAWAL_FEE,
-        now=datetime.utcnow
+        now=datetime.utcnow,
+        request=request  # Make request available in templates
     )
 
-# ---------- BASE HTML WITH IMPROVED CONTRAST ----------
+# ---------- BASE HTML WITH HIDDEN ADMIN LINKS ON EVENT PAGE ----------
 BASE_HTML = """
 <!DOCTYPE html>
 <html>
@@ -441,7 +442,6 @@ body { background: linear-gradient(135deg, #0b1120 0%, #1a2332 100%); color: var
 .alert-error { background: #3a1a1a; color: #ff8a8a; border-left: 4px solid #e74c3c; }
 .alert-info { background: #1a2a3a; color: #8ab8ff; border-left: 4px solid #3498db; }
 
-/* ---------- IMPROVED INPUT VISIBILITY ---------- */
 input, textarea, select {
     background: #1a2332 !important;
     color: #ffffff !important;
@@ -491,9 +491,15 @@ label {
 <li class="nav-item"><a class="nav-link" href="{{ url_for('profile') }}"><i class="bi bi-person"></i></a></li>
 <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i></a></li>
 {% else %}
-<li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Admin Login</a></li>
-<li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_login') }}">Contributor Login</a></li>
-<li class="nav-item"><a class="nav-link" href="{{ url_for('contact') }}">Contact</a></li>
+    {# Show contributor login/register always, but hide admin login/register on event landing page #}
+    {% if request.endpoint != 'event_landing' %}
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Admin Login</a></li>
+    {% endif %}
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_login') }}">Contributor Login</a></li>
+    {% if request.endpoint != 'event_landing' %}
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Admin Register</a></li>
+    {% endif %}
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('contact') }}">Contact</a></li>
 {% endif %}
 </ul>
 </div></div></nav>
@@ -1152,23 +1158,89 @@ def help_page():
 
 @app.route('/contributor/register', methods=['GET', 'POST'])
 def contributor_register():
-    flash('Contributor registration – under construction', 'info')
-    return redirect(url_for('login'))
+    event_token = request.args.get('event_token', '')
+    if request.method == 'POST':
+        # Get form data
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        event_token_post = request.form.get('event_token', '').strip()
+        if not username or not password or not name:
+            flash('All fields required.', 'error')
+            return render_template_string("""
+            <h1>Contributor Register</h1><form method="POST">...</form>
+            """)  # Simplified for now; we can redirect back with error
+
+        # Create contributor account
+        token = generate_unique_token()
+        while Contributor.query.filter_by(token=token).first():
+            token = generate_unique_token()
+        contrib = Contributor(
+            username=username,
+            password_hash=hash_password(password),
+            name=name,
+            phone=phone,
+            token=token,
+            status='pending'
+        )
+        db.session.add(contrib)
+        db.session.commit()
+        # Log them in
+        session['contributor_id'] = contrib.id
+        flash('Registration successful!', 'success')
+        if event_token_post:
+            return redirect(url_for('event_landing', token=event_token_post))
+        return redirect(url_for('index'))
+    return render_template_string("""
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="row justify-content-center"><div class="col-md-5"><div class="glass-card p-4"><h3 class="golden-text text-center">📝 Contributor Register</h3><form method="POST"><div class="mb-2"><input type="text" name="username" class="form-control" placeholder="Username" required></div><div class="mb-2"><input type="password" name="password" class="form-control" placeholder="Password" required></div><div class="mb-2"><input type="text" name="name" class="form-control" placeholder="Full Name" required></div><div class="mb-2"><input type="tel" name="phone" class="form-control" placeholder="Phone" required></div><input type="hidden" name="event_token" value="{{ request.args.get('event_token', '') }}">
+    <button type="submit" class="btn btn-gold w-100">Register</button></form><div class="mt-3 text-center"><small><a href="{{ url_for('contributor_login', event_token=request.args.get('event_token', '')) }}">Already have an account?</a></small></div></div></div></div>
+    {% endblock %}
+    """)
 
 @app.route('/contributor/login', methods=['GET', 'POST'])
 def contributor_login():
-    flash('Contributor login – under construction', 'info')
-    return redirect(url_for('login'))
+    event_token = request.args.get('event_token', '')
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        event_token_post = request.form.get('event_token', '').strip()
+        contrib = Contributor.query.filter_by(username=username, is_active=True).first()
+        if contrib and check_password(password, contrib.password_hash):
+            session['contributor_id'] = contrib.id
+            contrib.last_login = datetime.utcnow()
+            db.session.commit()
+            flash('Logged in.', 'success')
+            if event_token_post:
+                return redirect(url_for('event_landing', token=event_token_post))
+            return redirect(url_for('index'))
+        flash('Invalid credentials.', 'error')
+    return render_template_string("""
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="row justify-content-center"><div class="col-md-5"><div class="glass-card p-4"><h3 class="golden-text text-center">🔑 Contributor Login</h3><form method="POST"><div class="mb-3"><input type="text" name="username" class="form-control" placeholder="Username" required></div><div class="mb-3"><input type="password" name="password" class="form-control" placeholder="Password" required></div><div class="mb-3 form-check"><input type="checkbox" name="remember" id="remember" class="form-check-input"><label class="form-check-label" for="remember">Remember me</label></div><input type="hidden" name="event_token" value="{{ request.args.get('event_token', '') }}">
+    <button type="submit" class="btn btn-gold w-100">Login</button></form><div class="mt-3 text-center"><small><a href="{{ url_for('contributor_register', event_token=request.args.get('event_token', '')) }}">Create an account</a></small></div></div></div></div>
+    {% endblock %}
+    """)
 
 @app.route('/contributor/logout')
 def contributor_logout():
     session.pop('contributor_id', None)
     flash('Logged out.', 'info')
-    return redirect(url_for('login'))
+    return redirect(url_for('contributor_login'))
 
 @app.route('/contributor/dashboard')
 def contributor_dashboard():
-    return redirect(url_for('login'))
+    if not is_contributor_logged_in():
+        flash('Please log in.', 'error')
+        return redirect(url_for('contributor_login'))
+    contrib = get_contributor()
+    contributions = Contributor.query.filter_by(name=contrib.name, phone=contrib.phone).all()
+    return render_template_string("""
+    <h1>Contributor Dashboard</h1><p>Name: {{ contrib.name }}</p><ul>{% for c in contributions %}<li>{{ c.event.title }} - {{ c.status }}</li>{% endfor %}</ul>
+    """, contrib=contrib, contributions=contributions)
 
 @app.route('/manage-admins')
 def manage_admins():
