@@ -31,7 +31,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# -------------------- MODELS (unchanged) --------------------
+# -------------------- MODELS --------------------
 class Admin(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -170,7 +170,7 @@ class FeatureRequest(db.Model):
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# -------------------- HELPERS (unchanged) --------------------
+# -------------------- HELPERS --------------------
 def get_setting(key, default=None):
     setting = Setting.query.filter_by(key=key).first()
     return setting.value if setting else default
@@ -275,10 +275,8 @@ def create_notification(user_type, user_id, message, link=None):
 def get_unread_notifications(user_type, user_id):
     return Notification.query.filter_by(user_type=user_type, user_id=user_id, is_read=False).count()
 
-# -------------------- CUSTOM JINJA LOADER with enhanced CSS --------------------
+# -------------------- CUSTOM JINJA LOADER WITH NEW CSS --------------------
 from jinja2 import BaseLoader, TemplateNotFound, Environment
-
-WATERMARK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Ctext x='50%25' y='50%25' font-size='60' fill='rgba(0,0,0,0.04)' transform='rotate(-30,200,200)'%3EGoldenVow%3C/text%3E%3C/svg%3E"
 
 BASE_TEMPLATE = """
 <!DOCTYPE html>
@@ -290,90 +288,217 @@ BASE_TEMPLATE = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        :root { --primary: #d4af37; --secondary: #1a1a2e; --dark-bg: #0f0f1a; }
+        :root {
+            --primary: #d4af37;
+            --primary-dark: #b8960f;
+            --secondary: #0a0a1a;
+            --dark-bg: #05050f;
+            --glass: rgba(255,255,255,0.08);
+            --glass-border: rgba(255,255,255,0.12);
+        }
+        * { box-sizing: border-box; }
         body {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            background-image: url('""" + WATERMARK_SVG + """'), linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            background-repeat: repeat, no-repeat;
-            background-size: 300px 300px, cover;
-            background-attachment: fixed, fixed;
+            background: var(--dark-bg);
+            background-image: 
+                radial-gradient(ellipse at 20% 50%, rgba(212,175,55,0.08) 0%, transparent 70%),
+                radial-gradient(ellipse at 80% 50%, rgba(212,175,55,0.05) 0%, transparent 70%),
+                url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Ctext x="50%25" y="50%25" font-size="60" fill="rgba(212,175,55,0.03)" transform="rotate(-30,200,200)"%3EGoldenVow%3C/text%3E%3C/svg%3E');
+            background-repeat: repeat, no-repeat, repeat;
+            background-size: auto, cover, 300px 300px;
+            background-attachment: fixed, fixed, fixed;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
+            color: #eee;
         }
-        .container, .navbar, footer, .admin-sidebar { position: relative; z-index: 1; }
-        .golden-bg { background: linear-gradient(135deg, #d4af37, #b8960f); }
-        .navbar-gold { background: var(--secondary); border-bottom: 3px solid var(--primary); }
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+            border-radius: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .glass-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 40px rgba(212,175,55,0.15), inset 0 1px 0 rgba(255,255,255,0.08);
+        }
+        .navbar-gold {
+            background: rgba(10,10,26,0.85);
+            backdrop-filter: blur(10px);
+            border-bottom: 2px solid var(--primary);
+        }
         .navbar-gold .navbar-brand, .navbar-gold .nav-link { color: #fff; }
         .navbar-gold .nav-link:hover { color: var(--primary); }
-        .btn-gold { background: var(--primary); color: #fff; border: none; }
-        .btn-gold:hover { background: #b8960f; color: #fff; }
-        .card-shadow { 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
-            border: none; 
-            border-radius: 15px; 
-            background: rgba(255,255,255,0.92); 
-            backdrop-filter: blur(2px);
+        .btn-gold {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 15px rgba(212,175,55,0.3);
+            transition: all 0.3s ease;
         }
-        .event-card { transition: transform 0.2s; }
-        .event-card:hover { transform: translateY(-5px); }
-        .whatsapp-float {
-            position: fixed; bottom: 20px; right: 20px; z-index: 1000;
-            background: #25D366; color: white; border-radius: 50px; padding: 12px 20px;
-            text-decoration: none; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        .btn-gold:hover {
+            transform: scale(1.04);
+            box-shadow: 0 6px 25px rgba(212,175,55,0.5);
+            color: #fff;
         }
-        .whatsapp-float:hover { background: #128C7E; color: white; }
-        .status-badge { font-size: 0.8rem; padding: 5px 12px; border-radius: 20px; }
-        .footer { background: var(--secondary); color: #ccc; padding: 30px 0; margin-top: 40px; }
-        .footer a { color: var(--primary); text-decoration: none; }
-        .chat-container { height: 400px; overflow-y: auto; background: #fff; border-radius: 10px; padding: 15px; }
-        .chat-msg { margin-bottom: 10px; padding: 8px 15px; border-radius: 20px; max-width: 80%; }
-        .chat-msg.admin { background: #d4af37; color: #fff; margin-right: auto; }
-        .chat-msg.contributor { background: #e9ecef; margin-left: auto; }
-        .chat-msg.super { background: #dc3545; color: #fff; }
-        .testimonial-card { border-left: 4px solid var(--primary); }
-        .admin-sidebar { 
-            background: var(--dark-bg); 
-            min-height: 100vh; 
-            padding: 20px;
-            border-radius: 0 20px 20px 0;
-            box-shadow: 2px 0 15px rgba(0,0,0,0.3);
+        .btn-outline-gold {
+            border: 2px solid var(--primary);
+            color: var(--primary);
+            background: transparent;
         }
-        .admin-sidebar .nav-link { color: #ccc; }
-        .admin-sidebar .nav-link:hover, .admin-sidebar .nav-link.active { color: var(--primary); }
+        .btn-outline-gold:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+        .admin-sidebar {
+            background: rgba(5,5,15,0.85);
+            backdrop-filter: blur(12px);
+            border-radius: 20px 0 0 20px;
+            min-height: 100vh;
+            padding: 25px 15px;
+            border-right: 2px solid var(--primary);
+        }
+        .admin-sidebar .nav-link {
+            color: #bbb;
+            border-radius: 12px;
+            padding: 10px 15px;
+            transition: 0.2s;
+        }
+        .admin-sidebar .nav-link:hover, .admin-sidebar .nav-link.active {
+            background: rgba(212,175,55,0.15);
+            color: var(--primary);
+        }
         .admin-sidebar h5 { color: var(--primary); }
-        .maintenance-banner { background: #ffc107; color: #000; text-align: center; padding: 8px; font-weight: bold; }
-        /* Intro page specific */
+        .hero-section {
+            background: radial-gradient(ellipse at center, rgba(212,175,55,0.12) 0%, transparent 70%);
+            border-radius: 30px;
+            padding: 60px 20px;
+            border: 1px solid rgba(212,175,55,0.15);
+        }
+        .whatsapp-float {
+            background: #25D366;
+            box-shadow: 0 4px 20px rgba(37,211,102,0.4);
+            border-radius: 50px;
+            padding: 12px 24px;
+            color: #fff;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .whatsapp-float:hover { transform: scale(1.05); background: #128C7E; color: #fff; }
+        .chat-container {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            padding: 15px;
+        }
+        .chat-msg.admin { background: var(--primary); color: #000; }
+        .chat-msg.contributor { background: rgba(255,255,255,0.15); color: #fff; }
+        .chat-msg.super { background: #dc3545; color: #fff; }
+        .footer {
+            background: rgba(5,5,15,0.9);
+            border-top: 1px solid var(--primary);
+            color: #aaa;
+        }
+        .footer a { color: var(--primary); }
+        .maintenance-banner { background: #ffc107; color: #000; }
         .intro-container {
             height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            color: white;
+            background: radial-gradient(ellipse at 30% 40%, rgba(212,175,55,0.2), transparent 70%),
+                        radial-gradient(ellipse at 70% 60%, rgba(212,175,55,0.1), transparent 60%),
+                        var(--dark-bg);
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        .intro-gold { color: var(--primary); }
-        .intro-title { font-size: 4rem; font-weight: bold; letter-spacing: 4px; }
-        .intro-sub { font-size: 1.8rem; margin-top: 20px; opacity: 0.8; }
-        .intro-btn { 
-            margin-top: 40px; 
-            padding: 15px 50px; 
-            font-size: 1.3rem; 
-            border-radius: 50px; 
-            background: var(--primary); 
-            color: #fff; 
+        .intro-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(45deg, transparent, transparent 30px, rgba(212,175,55,0.02) 30px, rgba(212,175,55,0.02) 60px);
+            animation: shimmer 20s linear infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-50%) translateY(-50%) rotate(0deg); }
+            100% { transform: translateX(-50%) translateY(-50%) rotate(360deg); }
+        }
+        .intro-title {
+            font-size: 4.5rem;
+            font-weight: 800;
+            letter-spacing: 6px;
+            text-shadow: 0 0 40px rgba(212,175,55,0.3);
+            position: relative;
+            z-index: 1;
+        }
+        .intro-sub {
+            font-size: 1.8rem;
+            opacity: 0.8;
+            position: relative;
+            z-index: 1;
+        }
+        .intro-btn {
+            margin-top: 40px;
+            padding: 18px 60px;
+            font-size: 1.3rem;
+            border-radius: 50px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
             border: none;
+            box-shadow: 0 8px 30px rgba(212,175,55,0.4);
             transition: 0.3s;
+            position: relative;
+            z-index: 1;
         }
-        .intro-btn:hover { background: #b8960f; transform: scale(1.05); }
-        .gold-sparkle { 
-            position: absolute; 
-            width: 100%; 
-            height: 100%; 
-            background: radial-gradient(circle at 30% 40%, rgba(212,175,55,0.15), transparent 70%);
+        .intro-btn:hover {
+            transform: scale(1.06);
+            box-shadow: 0 12px 40px rgba(212,175,55,0.6);
+        }
+        .gold-sparkle {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 30%, rgba(212,175,55,0.1), transparent 60%);
             pointer-events: none;
+            z-index: 0;
         }
-        @media (max-width: 768px) { .admin-sidebar { min-height: auto; border-radius: 0; } }
+        .table {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            overflow: hidden;
+            color: #eee;
+        }
+        .table thead { background: rgba(212,175,55,0.2); }
+        .table td, .table th { border-color: rgba(255,255,255,0.05); }
+        .list-group-item {
+            background: rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.05);
+            color: #eee;
+        }
+        .list-group-item:hover { background: rgba(212,175,55,0.08); }
+        .badge { font-weight: 500; }
+        .accordion-item { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.05); }
+        .accordion-button {
+            background: transparent;
+            color: #eee;
+        }
+        .accordion-button:not(.collapsed) {
+            background: rgba(212,175,55,0.15);
+            color: var(--primary);
+        }
+        .accordion-button:focus { box-shadow: none; border-color: var(--primary); }
+        .accordion-body { background: rgba(255,255,255,0.02); color: #ddd; }
+        @media (max-width: 768px) {
+            .admin-sidebar { border-radius: 0; min-height: auto; }
+            .intro-title { font-size: 2.8rem; }
+            .intro-sub { font-size: 1.2rem; }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -454,13 +579,10 @@ app.jinja_env.globals['unread_notifications'] = get_unread_notifications
 
 # -------------------- ROUTES --------------------
 
-# ---- INTRO PAGE (first visit) ----
 @app.route('/intro')
 def intro():
-    # If already seen intro in this session, go to landing
     if session.get('seen_intro'):
         return redirect(url_for('landing'))
-    # Mark as seen
     session['seen_intro'] = True
     return render_template_string("""
 {% extends 'base.html' %}
@@ -468,21 +590,19 @@ def intro():
 {% block content %}
 <div class="intro-container">
     <div class="gold-sparkle"></div>
-    <div>
+    <div style="position:relative; z-index:1;">
         <h1 class="intro-title"><i class="bi bi-award"></i> GoldenVow</h1>
         <p class="intro-sub">Transforming communities, one vow at a time.</p>
         <a href="{{ url_for('landing') }}" class="intro-btn">Enter Site <i class="bi bi-arrow-right"></i></a>
     </div>
 </div>
 <script>
-    // Speak welcome message using Speech Synthesis
     window.addEventListener('load', function() {
         var msg = new SpeechSynthesisUtterance("Welcome to Golden Vow, transforming the community.");
         msg.rate = 1.0;
         msg.pitch = 0.8;
         msg.volume = 1;
         msg.lang = 'en-US';
-        // Try to get a male voice
         var voices = window.speechSynthesis.getVoices();
         var maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Google UK') || v.name.includes('Samantha'));
         if (maleVoice) msg.voice = maleVoice;
@@ -492,10 +612,8 @@ def intro():
 {% endblock %}
 """)
 
-# ---- LANDING (main page) ----
 @app.route('/')
 def landing():
-    # If intro not yet seen, redirect to intro
     if not session.get('seen_intro'):
         return redirect(url_for('intro'))
     events = Event.query.filter_by(is_locked=False).order_by(Event.created_at.desc()).limit(9).all()
@@ -503,7 +621,7 @@ def landing():
     return render_template_string("""
 {% extends 'base.html' %}
 {% block content %}
-<div class="hero-section text-center py-5" style="background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; border-radius: 20px; margin-bottom: 30px;">
+<div class="hero-section text-center py-5" style="margin-bottom:30px;">
     <div class="container">
         <h1 class="display-3 fw-bold"><i class="bi bi-award"></i> GoldenVow</h1>
         <p class="lead">Empowering communities through transparent fundraising for dowry, burial, medical, education & harambee.</p>
@@ -516,11 +634,11 @@ def landing():
     <div class="row g-4">
         {% for event in events %}
         <div class="col-md-4">
-            <div class="card event-card card-shadow h-100">
+            <div class="card glass-card h-100">
                 <div class="card-body">
                     <h5 class="card-title">{{ event.title }}</h5>
                     <p class="text-muted small">{{ event.category.capitalize() }}</p>
-                    <div class="progress mb-2" style="height:8px;">
+                    <div class="progress mb-2" style="height:8px; background: rgba(255,255,255,0.1);">
                         <div class="progress-bar bg-warning" style="width:{{ (event.raised_amount/event.target_amount*100)|round|int if event.target_amount>0 else 0 }}%;"></div>
                     </div>
                     <p class="card-text">Raised: KES {{ "%.2f"|format(event.raised_amount) }} / {{ "%.2f"|format(event.target_amount) }}</p>
@@ -537,7 +655,7 @@ def landing():
     <div class="row g-4">
         {% for t in testimonials %}
         <div class="col-md-4">
-            <div class="card testimonial-card card-shadow h-100">
+            <div class="card glass-card h-100">
                 <div class="card-body">
                     <p><i class="bi bi-quote"></i> {{ t.content }}</p>
                     <footer class="blockquote-footer">{{ t.name }} <span class="text-warning">{% for i in range(t.rating) %}★{% endfor %}</span></footer>
@@ -550,7 +668,6 @@ def landing():
 {% endblock %}
 """, events=events, testimonials=testimonials)
 
-# ---- Super Admin creation ----
 @app.route('/create_super_admin')
 def create_super_admin():
     if Admin.query.filter_by(is_super_admin=True).first():
@@ -566,7 +683,6 @@ def create_super_admin():
     db.session.commit()
     return "Super admin created! Login: super / super123"
 
-# ---- Registration ----
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -582,7 +698,6 @@ def register():
         if existing:
             flash('Email already registered. Please login.', 'warning')
             return redirect(url_for('login'))
-        # Create a default "General" event if none exists
         general_event = Event.query.filter_by(title='General Fund').first()
         if not general_event:
             admin = Admin.query.first()
@@ -617,7 +732,7 @@ def register():
 {% block content %}
 <div class="row justify-content-center mt-5">
     <div class="col-md-5">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-header bg-transparent"><h4>Register as Contributor</h4></div>
             <div class="card-body">
                 <form method="post">
@@ -636,7 +751,6 @@ def register():
 {% endblock %}
 """)
 
-# ---- Login & Admin Login (unchanged) ----
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -672,7 +786,7 @@ def login():
 {% block content %}
 <div class="row justify-content-center mt-5">
     <div class="col-md-4">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-header bg-transparent"><h4>Login</h4></div>
             <div class="card-body">
                 <form method="post">
@@ -708,7 +822,7 @@ def admin_login():
 {% block content %}
 <div class="row justify-content-center mt-5">
     <div class="col-md-4">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-header"><h4>Admin Login</h4></div>
             <div class="card-body">
                 <form method="post">
@@ -738,7 +852,7 @@ def dashboard_redirect():
         return redirect(url_for('contributor_dashboard'))
     return redirect(url_for('login'))
 
-# -------------------- ADMIN ROUTES (improved styling) --------------------
+# -------------------- ADMIN ROUTES --------------------
 @app.route('/admin/dashboard')
 @admin_required
 def admin_dashboard():
@@ -766,21 +880,21 @@ def admin_dashboard():
     <div class="col-md-9">
         <h3>Dashboard</h3>
         <div class="row g-3 mb-4">
-            <div class="col-md-4"><div class="card card-shadow p-3"><h5>Total Events</h5><h2>{{ events|length }}</h2></div></div>
-            <div class="col-md-4"><div class="card card-shadow p-3"><h5>Pending Payments</h5><h2>{{ pending_payments }}</h2></div></div>
-            <div class="col-md-4"><div class="card card-shadow p-3"><h5>Total Raised</h5><h2>KES {{ "%.2f"|format(total_raised) }}</h2></div></div>
+            <div class="col-md-4"><div class="card glass-card p-3"><h5>Total Events</h5><h2>{{ events|length }}</h2></div></div>
+            <div class="col-md-4"><div class="card glass-card p-3"><h5>Pending Payments</h5><h2>{{ pending_payments }}</h2></div></div>
+            <div class="col-md-4"><div class="card glass-card p-3"><h5>Total Raised</h5><h2>KES {{ "%.2f"|format(total_raised) }}</h2></div></div>
         </div>
         <h4>My Events</h4>
         <div class="row">
             {% for event in events %}
             <div class="col-md-4 mb-3">
-                <div class="card event-card card-shadow">
+                <div class="card glass-card h-100">
                     <div class="card-body">
                         <h5>{{ event.title }}</h5>
                         <p class="small">Status: {% if event.is_locked %}<span class="badge bg-danger">Locked</span>{% else %}<span class="badge bg-success">Active</span>{% endif %}</p>
                         <p>Raised: KES {{ "%.2f"|format(event.raised_amount) }} / {{ "%.2f"|format(event.target_amount) }}</p>
                         <a href="{{ url_for('manage_event', event_id=event.id) }}" class="btn btn-gold btn-sm">Manage</a>
-                        <a href="{{ url_for('event_landing', event_token=event.event_token) }}" class="btn btn-outline-secondary btn-sm">View</a>
+                        <a href="{{ url_for('event_landing', event_token=event.event_token) }}" class="btn btn-outline-gold btn-sm">View</a>
                     </div>
                 </div>
             </div>
@@ -816,7 +930,7 @@ def create_event():
 {% block content %}
 <div class="row justify-content-center mt-4">
     <div class="col-md-6">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-header"><h4>Create Event</h4></div>
             <div class="card-body">
                 <form method="post">
@@ -873,7 +987,7 @@ def manage_event(event_id):
                         <a href="{{ url_for('approve_payment', payment_id=p.id) }}" class="btn btn-sm btn-success">Approve</a>
                         <a href="{{ url_for('decline_payment', payment_id=p.id) }}" class="btn btn-sm btn-danger">Decline</a>
                         {% endif %}
-                        <a href="{{ url_for('generate_receipt', payment_id=p.id) }}" class="btn btn-sm btn-outline-secondary">Receipt</a>
+                        <a href="{{ url_for('generate_receipt', payment_id=p.id) }}" class="btn btn-sm btn-outline-gold">Receipt</a>
                     </td>
                 </tr>
                 {% endfor %}
@@ -969,7 +1083,7 @@ def generate_receipt(payment_id):
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f'receipt_{payment.id}.pdf', mimetype='application/pdf')
 
-# -------------------- CONTRIBUTOR ROUTES (unchanged but with password fields) --------------------
+# -------------------- CONTRIBUTOR ROUTES --------------------
 @app.route('/event/<event_token>')
 def event_landing(event_token):
     event = Event.query.filter_by(event_token=event_token).first_or_404()
@@ -986,7 +1100,7 @@ def event_landing(event_token):
         <h2>{{ event.title }}</h2>
         <p><span class="badge bg-secondary">{{ event.category.capitalize() }}</span></p>
         <p>{{ event.description }}</p>
-        <div class="progress mb-3" style="height:20px;">
+        <div class="progress mb-3" style="height:20px; background: rgba(255,255,255,0.1);">
             <div class="progress-bar bg-warning" style="width:{{ (event.raised_amount/event.target_amount*100)|round|int if event.target_amount>0 else 0 }}%;">
                 {{ "%.0f"|format((event.raised_amount/event.target_amount*100)|round|int if event.target_amount>0 else 0) }}%
             </div>
@@ -994,7 +1108,7 @@ def event_landing(event_token):
         <p><strong>Raised:</strong> KES {{ "%.2f"|format(event.raised_amount) }} / {{ "%.2f"|format(event.target_amount) }}</p>
         {% if event.deadline %}<p><strong>Deadline:</strong> {{ event.deadline.strftime('%Y-%m-%d') }}</p>{% endif %}
         
-        <div class="card card-shadow mt-3">
+        <div class="card glass-card mt-3">
             <div class="card-body">
                 <h5>Contribute Now</h5>
                 <form action="{{ url_for('contributor_register', event_token=event.event_token) }}" method="post">
@@ -1012,7 +1126,7 @@ def event_landing(event_token):
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-body">
                 <h5>Contributors</h5>
                 <ul class="list-group list-group-flush">
@@ -1022,7 +1136,7 @@ def event_landing(event_token):
                 </ul>
             </div>
         </div>
-        <div class="card card-shadow mt-3">
+        <div class="card glass-card mt-3">
             <div class="card-body">
                 <h5>Recent Testimonials</h5>
                 {% for t in testimonials %}
@@ -1099,7 +1213,7 @@ def upload_proof(event_token, contributor_id):
 {% block content %}
 <div class="row justify-content-center mt-4">
     <div class="col-md-5">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-body">
                 <h4>Upload Payment Proof</h4>
                 <p>Event: {{ event.title }}</p>
@@ -1144,13 +1258,13 @@ def contributor_dashboard():
     </div>
     <div class="col-md-6">
         <a href="{{ url_for('public_chat') }}" class="btn btn-gold w-100 mb-2">Public Chat</a>
-        <a href="{{ url_for('feature_request') }}" class="btn btn-outline-secondary w-100">Suggest a Feature</a>
+        <a href="{{ url_for('feature_request') }}" class="btn btn-outline-gold w-100">Suggest a Feature</a>
     </div>
 </div>
 {% endblock %}
 """, contributor=contributor, payments=payments)
 
-# -------------------- CHAT ROUTES (unchanged) --------------------
+# -------------------- CHAT ROUTES --------------------
 @app.route('/chat')
 def public_chat():
     messages = ChatMessage.query.order_by(ChatMessage.timestamp.desc()).limit(50).all()[::-1]
@@ -1216,7 +1330,7 @@ def handle_chat_message(data):
     db.session.commit()
     emit('message', {'sender_type': data['sender_type'], 'sender_name': data.get('sender_name'), 'message': data['message']}, room=data['room'])
 
-# -------------------- CONTACT, HELP, FEATURE (unchanged) --------------------
+# -------------------- CONTACT, HELP, FEATURE --------------------
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
     if request.method == 'POST':
@@ -1236,7 +1350,7 @@ def contact():
 {% block content %}
 <div class="row justify-content-center mt-4">
     <div class="col-md-6">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-body">
                 <h4>Contact Us</h4>
                 <form method="post">
@@ -1326,7 +1440,7 @@ def feature_request():
 {% endblock %}
 """, requests=requests)
 
-# -------------------- SUPER ADMIN ROUTES (improved styling) --------------------
+# -------------------- SUPER ADMIN ROUTES --------------------
 @app.route('/super/dashboard')
 @super_admin_required
 def super_dashboard():
@@ -1349,10 +1463,10 @@ def super_dashboard():
     <div class="col-md-9">
         <h3>Super Admin Dashboard</h3>
         <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card card-shadow p-3"><h5>Admins</h5><h2>{{ admins|length }}</h2></div></div>
-            <div class="col-md-3"><div class="card card-shadow p-3"><h5>Events</h5><h2>{{ events|length }}</h2></div></div>
-            <div class="col-md-3"><div class="card card-shadow p-3"><h5>Pending Withdrawals</h5><h2>{{ pending_withdrawals }}</h2></div></div>
-            <div class="col-md-3"><div class="card card-shadow p-3"><h5>Total Fees</h5><h2>KES {{ "%.2f"|format(total_fees) }}</h2></div></div>
+            <div class="col-md-3"><div class="card glass-card p-3"><h5>Admins</h5><h2>{{ admins|length }}</h2></div></div>
+            <div class="col-md-3"><div class="card glass-card p-3"><h5>Events</h5><h2>{{ events|length }}</h2></div></div>
+            <div class="col-md-3"><div class="card glass-card p-3"><h5>Pending Withdrawals</h5><h2>{{ pending_withdrawals }}</h2></div></div>
+            <div class="col-md-3"><div class="card glass-card p-3"><h5>Total Fees</h5><h2>KES {{ "%.2f"|format(total_fees) }}</h2></div></div>
         </div>
         <div class="row">
             <div class="col-md-6">
@@ -1386,7 +1500,7 @@ def super_dashboard():
             </div>
         </div>
         <div class="mt-3">
-            <a href="{{ url_for('toggle_maintenance') }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('toggle_maintenance') }}" class="btn btn-outline-gold">
                 {% if get_setting('maintenance_mode') == 'true' %}Disable Maintenance{% else %}Enable Maintenance{% endif %}
             </a>
         </div>
@@ -1430,7 +1544,7 @@ def request_withdrawal():
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-5">
-        <div class="card card-shadow">
+        <div class="card glass-card">
             <div class="card-body">
                 <h4>Request Withdrawal</h4>
                 <form method="post">
@@ -1468,7 +1582,7 @@ def toggle_maintenance():
     flash('Maintenance mode toggled.', 'info')
     return redirect(url_for('super_dashboard'))
 
-# -------------------- SCHEDULER (unchanged) --------------------
+# -------------------- SCHEDULER --------------------
 def send_reminders():
     with app.app_context():
         pending = Payment.query.filter_by(status='pending').filter(Payment.created_at < datetime.utcnow() - timedelta(days=2)).all()
