@@ -196,9 +196,56 @@ class FeatureRequest(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-# ---------- CREATE TABLES ----------
+# ---------- CREATE TABLES & MIGRATIONS ----------
 with app.app_context():
     db.create_all()
+    for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
+        if not Setting.query.filter_by(key=key).first():
+            db.session.add(Setting(key=key, value=default))
+            db.session.commit()
+    try:
+        inspector = inspect(db.engine)
+        cols = [c['name'] for c in inspector.get_columns('contributor')]
+        if 'decline_reason' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN decline_reason TEXT')
+        if 'sender_name' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN sender_name VARCHAR(150)')
+        if 'auto_verified' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN auto_verified BOOLEAN DEFAULT 0')
+        if 'username' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN username VARCHAR(100)')
+        if 'password_hash' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN password_hash VARCHAR(200)')
+        if 'last_login' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN last_login TIMESTAMP')
+        if 'is_active' not in cols:
+            db.engine.execute('ALTER TABLE contributor ADD COLUMN is_active BOOLEAN DEFAULT 1')
+        cols = [c['name'] for c in inspector.get_columns('admin')]
+        if 'is_active' not in cols:
+            db.engine.execute('ALTER TABLE admin ADD COLUMN is_active BOOLEAN DEFAULT 1')
+        cols = [c['name'] for c in inspector.get_columns('event')]
+        if 'account_name' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN account_name VARCHAR(150)')
+        if 'whatsapp_contact' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN whatsapp_contact VARCHAR(20)')
+        if 'payment_instructions' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN payment_instructions TEXT')
+        if 'first_contribution_date' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN first_contribution_date TIMESTAMP')
+        if 'fee_paid' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN fee_paid BOOLEAN DEFAULT 0')
+        if 'fee_paid_date' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN fee_paid_date TIMESTAMP')
+        if 'grace_period' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN grace_period INTEGER DEFAULT 0')
+        if 'has_grace_period' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN has_grace_period BOOLEAN DEFAULT 0')
+        if 'disabled' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN disabled BOOLEAN DEFAULT 0')
+        if 'disabled_reason' not in cols:
+            db.engine.execute('ALTER TABLE event ADD COLUMN disabled_reason TEXT')
+    except Exception as e:
+        print(f"Migration warning: {e}")
 
 # ---------- HELPERS ----------
 def is_admin_logged_in():
@@ -266,10 +313,14 @@ def calculate_fee(amount, admin_id=None):
     return max(fee, 0.0)
 
 def get_event_total_contributions(event_id):
-    return db.session.query(func.sum(Contributor.paid_amount)).filter_by(event_id=event_id, status='approved').scalar() or 0
+    return db.session.query(func.sum(Contributor.paid_amount)).filter_by(
+        event_id=event_id, status='approved'
+    ).scalar() or 0
 
 def get_event_total_fee(event_id):
-    return db.session.query(func.sum(Contributor.fee_amount)).filter_by(event_id=event_id, status='approved').scalar() or 0
+    return db.session.query(func.sum(Contributor.fee_amount)).filter_by(
+        event_id=event_id, status='approved'
+    ).scalar() or 0
 
 def get_global_total_fees():
     return db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
@@ -342,17 +393,9 @@ def generate_event_logo(event, size=120):
     </svg>'''
     return svg
 
-def get_app_logo(size=40):
-    return f'''<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">
-        <circle cx="{size/2}" cy="{size/2}" r="{size/2-3}" fill="#1A2A3A"/>
-        <circle cx="{size/2}" cy="{size/2}" r="{size/2-8}" stroke="#D4AF37" stroke-width="2" fill="none"/>
-        <text x="{size/2}" y="{size/2+5}" text-anchor="middle" fill="#D4AF37" font-size="{size/3}" font-weight="bold">GV</text>
-        <text x="{size/4}" y="{size/4}" fill="#D4AF37" font-size="{size/8}">✦</text>
-        <text x="{size*0.75}" y="{size/4}" fill="#D4AF37" font-size="{size/8}">✦</text>
-    </svg>'''
-
-# ---------- BASE HTML ----------
-BASE_HTML = """<!DOCTYPE html>
+# ---------- BASE HTML STRING ----------
+BASE_HTML = """
+<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GoldenVow – {% block title %}Fundraising{% endblock %}</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -413,9 +456,10 @@ body { background: linear-gradient(135deg, #0b1120 0%, #1a2332 100%); color: var
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 {% block scripts %}{% endblock %}
 </body>
-</html>"""
+</html>
+"""
 
-# ---------- CUSTOM LOADER ----------
+# ---------- CUSTOM JINJA LOADER (SO "base.html" WORKS) ----------
 class StringLoader(BaseLoader):
     def __init__(self, base_html):
         self.base_html = base_html
@@ -426,16 +470,119 @@ class StringLoader(BaseLoader):
 
 app.jinja_env.loader = StringLoader(BASE_HTML)
 
-# ---------- HTML TEMPLATES ----------
-LOGIN_HTML = """{% extends "base.html" %}
+# ---------- HTML PAGE TEMPLATES (INHERIT FROM base.html) ----------
+LOGIN_HTML = """
+{% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center"><div class="col-md-5 col-lg-4"><div class="glass-card p-4"><h3 class="text-center golden-text">✦ Admin Login</h3><hr><form method="POST"><div class="mb-3"><label class="form-label">Username</label><input type="text" name="username" class="form-control bg-dark text-light" required></div><div class="mb-3"><label class="form-label">Password</label><input type="password" name="password" class="form-control bg-dark text-light" required></div><button type="submit" class="btn btn-gold w-100">Login</button></form><div class="mt-3 text-center"><a href="{{ url_for('forgot_password') }}" class="text-muted-light">Forgot password?</a><br><small class="text-muted-light">Don't have an account? <a href="{{ url_for('register') }}" class="golden-text">Register</a></small><hr><small class="text-muted-light">Contributor? <a href="{{ url_for('contributor_login') }}" class="golden-text">Login here</a></small></div></div></div></div>
-{% endblock %}"""
+{% endblock %}
+"""
 
-REGISTER_HTML = """{% extends "base.html" %}
+REGISTER_HTML = """
+{% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center"><div class="col-md-6 col-lg-5"><div class="glass-card p-4"><h3 class="text-center golden-text">✦ Create Admin Account</h3><hr><form method="POST"><div class="mb-2"><label class="form-label">Username <span class="text-danger">*</span></label><input type="text" name="username" class="form-control bg-dark text-light" required></div><div class="mb-2"><label class="form-label">Email <span class="text-danger">*</span></label><input type="email" name="email" class="form-control bg-dark text-light" required></div><div class="mb-2"><label class="form-label">Phone</label><input type="tel" name="phone" class="form-control bg-dark text-light"></div><div class="mb-2"><label class="form-label">Password <span class="text-danger">*</span></label><input type="password" name="password" class="form-control bg-dark text-light" required></div><div class="mb-2"><label class="form-label">Referral Code (optional)</label><input type="text" name="referral_code" class="form-control bg-dark text-light" placeholder="Enter code if you have one"></div><div class="mb-3"><label class="form-label">Super Admin Secret (if applicable)</label><input type="password" name="super_secret" class="form-control bg-dark text-light" placeholder="Only if you're the developer"></div><button type="submit" class="btn btn-gold w-100">Register</button></form><div class="mt-3 text-center"><small class="text-muted-light">Already have an account? <a href="{{ url_for('login') }}" class="golden-text">Login</a></small></div></div></div></div>
-{% endblock %}"""
+{% endblock %}
+"""
+
+DASHBOARD_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap"><h2 class="golden-text">👋 Welcome, {{ admin.username }}</h2><div class="d-flex gap-2"><a href="{{ url_for('contact_super') }}" class="btn btn-outline-gold"><i class="bi bi-envelope"></i> Contact Super Admin</a><a href="{{ url_for('create_event') }}" class="btn btn-gold"><i class="bi bi-plus-circle"></i> New Event</a></div></div>
+<div class="glass-card p-3 mb-4"><h5 class="golden-text"><i class="bi bi-lightbulb"></i> Quick Tips</h5><ul class="text-muted-light"><li>🔑 <strong>Account Name:</strong> Always set the exact name contributors will see when sending money. The system will use this for verification.</li><li>📸 <strong>Payment Proof:</strong> Contributors upload screenshots. You review and click <strong>Approve</strong>.</li><li>📖 <strong>Full Guide:</strong> Click <a href="{{ url_for('help_page') }}" class="golden-text">Help</a> for detailed instructions.</li><li>⚠️ <strong>Event Locking:</strong> If fees reach KES 50+, your event will lock after 3 days if not paid.</li></ul></div>
+<div class="row g-3 mb-4"><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">{{ events.total }}</h3><small class="text-muted-light">Events</small></div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">KES {{ total_raised|round(2)|int }}</h3><small class="text-muted-light">Total Raised</small></div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">{{ pending_contributions }}</h3><small class="text-muted-light">Pending Approvals</small></div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">{{ admin.referral_count }}</h3><small class="text-muted-light">Referrals</small></div></div></div>
+<h4 class="golden-text">📋 Your Events</h4><div class="row">{% for event in events.items %}<div class="col-md-6 col-lg-4 mb-3"><div class="glass-card h-100 p-3"><div class="d-flex justify-content-between align-items-center"><h5>{{ event.title }}</h5><span class="badge bg-secondary">{{ event.event_type|title }}</span></div><p class="mt-2">Raised: <strong>KES {{ get_event_total_contributions(event.id)|round(2) }}</strong> / {{ event.target_amount|round(2) }}</p><div class="progress" style="height:6px;"><div class="progress-bar progress-bar-gold" style="width:{{ (get_event_total_contributions(event.id)/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;"></div></div><small class="text-muted-light">Status: {{ 'Active' if event.is_active and not event.disabled else 'Inactive/Locked' }}</small>{% if event.account_name %}<small class="d-block text-muted-light">Account: {{ event.account_name }}</small>{% endif %}<div class="mt-2 d-flex flex-wrap gap-1"><a href="{{ url_for('event_landing', token=event.token) }}" class="btn btn-sm btn-outline-gold">View</a><a href="{{ url_for('edit_event', token=event.token) }}" class="btn btn-sm btn-outline-secondary">Edit</a><a href="{{ url_for('manage_contributors', token=event.token) }}" class="btn btn-sm btn-outline-info">Contributors</a><form method="POST" action="{{ url_for('toggle_event_active', token=event.token) }}" style="display:inline;"><button type="submit" class="btn btn-sm btn-{{ 'danger' if event.is_active else 'success' }}">{{ 'Disable' if event.is_active else 'Enable' }}</button></form></div></div></div>{% else %}<p class="text-muted-light">No events yet. <a href="{{ url_for('create_event') }}" class="golden-text">Create one now</a>.</p>{% endfor %}</div>
+{% if events.pages > 1 %}<nav><ul class="pagination justify-content-center">{% if events.has_prev %}<li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ events.prev_num }}">Previous</a></li>{% endif %}<li class="page-item active"><span class="page-link bg-gold text-dark border-0">{{ events.page }}</span></li>{% if events.has_next %}<li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ events.next_num }}">Next</a></li>{% endif %}</ul></nav>{% endif %}
+<div class="mt-3 text-center"><a href="{{ url_for('help_page') }}" class="text-muted-light"><i class="bi bi-question-circle"></i> Need help? Read the Admin Guide</a></div>
+{% endblock %}
+"""
+
+SUPER_DASHBOARD_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4"><h2 class="golden-text">👑 Super Admin Dashboard</h2><span class="badge bg-gold text-dark">You are the Super Admin</span></div>
+<div class="row g-3 mb-4"><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">{{ total_events }}</h3><small>Total Events (All Admins)</small></div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">KES {{ total_contributions|round(2)|int }}</h3><small>Total Raised (Global)</small></div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">KES {{ total_fees|round(2) }}</h3><small>Your Fees Collected (2%)</small>{% if total_fees < minimum_withdrawal_fee %}<div class="text-warning small mt-1">🔒 Need KES {{ minimum_withdrawal_fee|round(0) }} to withdraw</div>{% else %}<div class="text-success small mt-1">✅ Ready to withdraw!</div>{% endif %}</div></div><div class="col-md-3 col-6"><div class="glass-card p-3 text-center"><h3 class="golden-text">{{ pending_withdrawals }}</h3><small>Pending Withdrawals</small></div></div></div>
+<div class="glass-card p-3 mb-4"><div class="d-flex justify-content-between align-items-center"><div><h5 class="golden-text">💰 Withdraw Your Fees</h5><p class="text-muted-light small mb-0">{% if total_fees >= minimum_withdrawal_fee %}✅ You have KES {{ total_fees|round(2) }} available. Min: KES {{ minimum_withdrawal_fee|round(0) }}{% else %}⚠️ Need at least KES {{ minimum_withdrawal_fee|round(0) }}. Current: KES {{ total_fees|round(2) }}{% endif %}</p></div><button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#withdrawalModal" {% if total_fees < minimum_withdrawal_fee %}disabled{% endif %}><i class="bi bi-arrow-up-circle"></i> Request Withdrawal</button></div></div>
+<div class="row g-3 mb-4"><div class="col-md-3"><a href="{{ url_for('manage_admins') }}" class="text-decoration-none"><div class="glass-card p-3 text-center"><i class="bi bi-people fs-2 golden-text"></i><p>Manage Admins</p></div></a></div><div class="col-md-3"><a href="{{ url_for('withdrawals') }}" class="text-decoration-none"><div class="glass-card p-3 text-center"><i class="bi bi-arrow-up-circle fs-2 golden-text"></i><p>Manage Withdrawals</p></div></a></div><div class="col-md-3"><a href="{{ url_for('settings') }}" class="text-decoration-none"><div class="glass-card p-3 text-center"><i class="bi bi-gear fs-2 golden-text"></i><p>System Settings</p></div></a></div><div class="col-md-3"><a href="{{ url_for('manage_feature_requests') }}" class="text-decoration-none"><div class="glass-card p-3 text-center"><i class="bi bi-lightbulb fs-2 golden-text"></i><p>Feature Requests</p></div></a></div></div>
+<h4 class="golden-text">👥 All Admins</h4><div class="table-responsive"><table class="table table-dark table-hover"><thead><tr><th>Username</th><th>Email</th><th>Referrals</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for a in admins %}<tr><td>{{ a.username }} {% if a.is_super_admin %}👑{% endif %}</td><td>{{ a.email }}</td><td>{{ a.referral_count }}</td><td>{% if a.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Disabled</span>{% endif %}</td><td>{% if not a.is_super_admin %}<form method="POST" action="{{ url_for('toggle_admin', aid=a.id) }}" style="display:inline;"><button type="submit" class="btn btn-sm btn-outline-warning">{{ 'Disable' if a.is_active else 'Enable' }}</button></form><form method="POST" action="{{ url_for('delete_admin', aid=a.id) }}" style="display:inline;" onsubmit="return confirm('Delete this admin?');"><button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>{% else %}<span class="text-muted-light">Protected</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+{% if locked_events > 0 %}<div class="mt-4"><div class="glass-card p-3"><h5 class="golden-text">🔒 Locked Events ({{ locked_events }})</h5><p class="text-muted-light">These events are locked because fees (>= 50 bob) are overdue.</p><a href="{{ url_for('super_dashboard') }}" class="btn btn-sm btn-outline-gold">View All</a></div></div>{% endif %}
+<div class="modal fade" id="withdrawalModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content glass-card"><div class="modal-header border-0"><h5 class="modal-title golden-text">Request Withdrawal</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form method="POST" action="{{ url_for('request_withdrawal') }}"><div class="modal-body"><div class="mb-3"><label class="form-label">Amount (KES)</label><input type="number" name="amount" class="form-control bg-dark text-light" step="0.01" min="{{ minimum_withdrawal_fee }}" required><small class="text-muted-light">Minimum: KES {{ minimum_withdrawal_fee|round(0) }}. Available: KES {{ total_fees|round(2) }}</small></div><div class="mb-3"><label class="form-label">Phone Number</label><input type="tel" name="phone" class="form-control bg-dark text-light" required></div><div class="mb-3"><label class="form-label">Method</label><select name="method" class="form-select bg-dark text-light"><option value="mpesa">M-Pesa</option><option value="bank">Bank Transfer</option></select></div></div><div class="modal-footer border-0"><button type="submit" class="btn btn-gold">Submit Request</button></div></form></div></div></div>
+{% endblock %}
+"""
+
+CREATE_EVENT_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<h2 class="golden-text">✨ Create New Event</h2>
+<div class="glass-card p-4">
+<form method="POST" class="row g-3">
+<div class="col-md-6"><label class="form-label">Event Type</label><select name="event_type" class="form-select bg-dark text-light"><option value="dowry">🐂 Dowry</option><option value="burial">🕊️ Burial</option><option value="medical">❤️ Medical</option><option value="education">🎓 Education</option><option value="harambee">🤝 Harambee</option><option value="other">✦ Other</option></select></div>
+<div class="col-md-6"><label class="form-label">Event Title <span class="text-danger">*</span></label><input type="text" name="title" class="form-control bg-dark text-light" required></div>
+<div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control bg-dark text-light" rows="3"></textarea></div>
+<div class="col-md-4"><label class="form-label">Target Amount (KES) <span class="text-danger">*</span></label><input type="number" name="target_amount" class="form-control bg-dark text-light" step="0.01" required></div>
+<div class="col-md-4"><label class="form-label">Event Date <span class="text-danger">*</span></label><input type="datetime-local" name="event_date" class="form-control bg-dark text-light" required></div>
+<div class="col-md-4"><label class="form-label">Deadline <span class="text-danger">*</span></label><input type="datetime-local" name="deadline" class="form-control bg-dark text-light" required></div>
+<div class="col-12"><label class="form-label">Picture URL (optional)</label><input type="url" name="picture_url" class="form-control bg-dark text-light" placeholder="https://example.com/image.jpg"></div>
+<div class="col-12"><label class="form-label">Background Image URL (optional)</label><input type="url" name="background_image_url" class="form-control bg-dark text-light" placeholder="https://example.com/bg.jpg"></div>
+<h5 class="golden-text mt-3">💳 Payment Details</h5>
+<div class="col-md-12"><label class="form-label">Account Name (M-Pesa/Bank Account Holder) <span class="text-danger">*</span></label><input type="text" name="account_name" class="form-control bg-dark text-light" placeholder="e.g. Alex Kiprop" required><div class="text-muted-light small mt-1"><i class="bi bi-info-circle"></i> This is the name contributors will see when sending money.</div></div>
+<div class="col-md-3"><label class="form-label">Paybill</label><input type="text" name="paybill" class="form-control bg-dark text-light"></div>
+<div class="col-md-3"><label class="form-label">M-Pesa Number</label><input type="text" name="mpesa_number" class="form-control bg-dark text-light"></div>
+<div class="col-md-3"><label class="form-label">Till Number</label><input type="text" name="till_number" class="form-control bg-dark text-light"></div>
+<div class="col-md-3"><label class="form-label">WhatsApp Contact</label><input type="text" name="whatsapp_contact" class="form-control bg-dark text-light"></div>
+<div class="col-md-4"><label class="form-label">Bank Name</label><input type="text" name="bank_name" class="form-control bg-dark text-light"></div>
+<div class="col-md-4"><label class="form-label">Bank Account Name</label><input type="text" name="bank_account_name" class="form-control bg-dark text-light"></div>
+<div class="col-md-4"><label class="form-label">Bank Account Number</label><input type="text" name="bank_account_number" class="form-control bg-dark text-light"></div>
+<div class="col-12"><label class="form-label">Payment Instructions</label><textarea name="payment_instructions" class="form-control bg-dark text-light" rows="2"></textarea></div>
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" name="has_grace_period" value="1"><label class="form-check-label">Enable Grace Period</label></div></div>
+<div class="col-md-6"><label class="form-label">Grace Period (days)</label><input type="number" name="grace_period" class="form-control bg-dark text-light" value="0"></div>
+<div class="col-12"><button type="submit" class="btn btn-gold">🚀 Create Event</button><a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a></div>
+</form>
+</div>
+{% endblock %}
+"""
+
+EVENT_LANDING_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mb-4"><div class="glass-card p-4"><div class="mb-3">{{ generate_event_logo(event, 100)|safe }}</div>
+<h1 class="golden-text">{{ event.title }}</h1><p class="text-muted-light">{{ event.event_type|title }} • {{ event.event_date.strftime('%B %d, %Y') }}</p><p>{{ event.description }}</p>
+<div class="progress" style="height:25px;"><div class="progress-bar progress-bar-gold" id="progressBar" style="width:{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;"><span id="progressText">{{ (total_raised/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%</span></div></div>
+<h3 id="totalRaised" class="mt-2 golden-text">KES {{ total_raised|round(2) }}</h3><p class="text-muted-light">Target: KES {{ event.target_amount|round(2) }} • Deadline: {{ event.deadline.strftime('%B %d, %Y at %H:%M') }}</p></div></div>
+<div class="alert glass-card text-center">{{ daily_note }}</div>
+<div class="glass-card p-3 mb-3">{% if contributor %}<div class="d-flex justify-content-between align-items-center"><div><i class="bi bi-check-circle-fill golden-text"></i> Logged in as: <strong>{{ contributor.name }}</strong></div><a href="{{ url_for('contributor_logout') }}" class="btn btn-sm btn-outline-gold">Logout</a></div>{% else %}<div class="text-center"><p class="text-muted-light">Have an account? Log in to contribute faster!</p><div class="d-flex justify-content-center gap-2"><a href="{{ url_for('contributor_login', event_token=event.token) }}" class="btn btn-outline-gold"><i class="bi bi-box-arrow-in-right"></i> Login</a><a href="{{ url_for('contributor_register', event_token=event.token) }}" class="btn btn-gold"><i class="bi bi-person-plus"></i> Register</a></div></div>{% endif %}</div>
+<div class="glass-card p-3 mb-3"><h5 class="golden-text">💰 Payment Instructions</h5>{% if event.account_name %}<div class="alert alert-success bg-dark text-light" style="border-left:4px solid var(--gold);"><i class="bi bi-person-check golden-text"></i> <strong>Send money to:</strong> <span class="golden-text fs-5">{{ event.account_name }}</span><br><small class="text-muted-light">Please use this exact name when sending money.</small></div>{% endif %}{{ event.payment_instructions or 'Contact the organiser for payment details.' }}{% if event.paybill %}<p><strong>Paybill:</strong> {{ event.paybill }}</p>{% endif %}{% if event.mpesa_number %}<p><strong>M-Pesa:</strong> {{ event.mpesa_number }}</p>{% endif %}{% if event.till_number %}<p><strong>Till:</strong> {{ event.till_number }}</p>{% endif %}<p class="text-muted-light small">Fee: {{ fee_percentage }}% of contribution.</p></div>
+<div class="glass-card p-3 mb-3"><h5 class="golden-text">📎 Submit Payment Proof</h5><form method="POST" action="{{ url_for('submit_payment_proof', token=event.token) }}" enctype="multipart/form-data"><div class="mb-2"><label class="form-label">Your Name (as registered)</label><input type="text" name="contributor_name" class="form-control bg-dark text-light" value="{{ contributor.name if contributor else '' }}" readonly></div><div class="mb-2"><label class="form-label">Payment Screenshot</label><input type="file" name="screenshot" class="form-control bg-dark text-light" accept="image/*"></div><div class="mb-2"><label class="form-label">Additional Info (transaction code, etc.)</label><textarea name="payment_proof_text" class="form-control bg-dark text-light" rows="2"></textarea></div><button type="submit" class="btn btn-gold">Submit Proof</button></form></div>
+<div class="glass-card p-3 mb-3"><h5 class="golden-text">💬 Live Chat</h5><div id="chatMessages" style="max-height:200px; overflow-y:auto;">{% for msg in chat_messages %}<div><strong>{{ msg.sender_name }}</strong>: {{ msg.message }} <small class="text-muted-light">{{ msg.timestamp.strftime('%H:%M') }}</small></div>{% endfor %}</div><form id="chatForm" class="d-flex mt-2"><input type="text" id="chatName" class="form-control bg-dark text-light me-1" placeholder="Your name" style="max-width:150px;" value="{{ contributor.name if contributor else 'Anonymous' }}"><input type="text" id="chatMessage" class="form-control bg-dark text-light me-1" placeholder="Message..." required><button type="submit" class="btn btn-gold">Send</button></form></div>
+<div class="glass-card p-3 mb-3"><h5 class="golden-text">⭐ Testimonials</h5>{% for t in testimonials %}<div><strong>{{ t.message[:50] }}</strong> ({{ t.rating }}★) <small class="text-muted-light">{{ t.created_at.strftime('%d/%m') }}</small></div>{% endfor %}<form method="POST" action="{{ url_for('add_testimonial', token=event.token) }}" class="mt-2"><input type="text" name="name" placeholder="Your name" class="form-control bg-dark text-light mb-1" required><input type="number" name="rating" min="1" max="5" placeholder="Rating 1-5" class="form-control bg-dark text-light mb-1" required><input type="text" name="message" placeholder="Your message" class="form-control bg-dark text-light mb-1" required><button type="submit" class="btn btn-sm btn-gold">Submit</button></form></div>
+<div class="text-center mt-3"><a href="{{ url_for('submit_feature_request', event_token=event.token) }}" class="btn btn-outline-gold"><i class="bi bi-lightbulb"></i> Suggest a New Feature</a></div>
+{% endblock %}
+"""
+
+CONTRIBUTORS_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><h2 class="golden-text">👥 Contributors</h2><span class="badge bg-gold text-dark">{{ event.title }}</span></div>
+<p class="text-muted-light">Total Raised: <strong class="golden-text">KES {{ get_event_total_contributions(event.id)|round(2) }}</strong></p>
+<div class="glass-card p-3 mb-4"><h5 class="golden-text">➕ Add New Contributor</h5><form method="POST" action="{{ url_for('add_contributor', token=event.token) }}" class="row g-2"><div class="col-md-3"><input type="text" name="name" placeholder="Full Name" class="form-control bg-dark text-light" required></div><div class="col-md-3"><input type="tel" name="phone" placeholder="Phone" class="form-control bg-dark text-light" required></div><div class="col-md-3"><input type="number" name="pledge_amount" placeholder="Amount (KES)" class="form-control bg-dark text-light" step="0.01" required></div><div class="col-md-3"><button type="submit" class="btn btn-gold w-100">Add</button></div></form></div>
+<div class="table-responsive"><table class="table table-dark table-hover"><thead><tr><th>Name</th><th>Phone</th><th>Pledge</th><th>Paid</th><th>Fee</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for c in contributors.items %}<tr><td>{{ c.name }}{% if c.username %}<span class="badge bg-info text-dark">👤 {{ c.username }}</span>{% endif %}</td><td>{{ c.phone }}</td><td>KES {{ c.pledge_amount|round(2) }}</td><td>KES {{ c.paid_amount|round(2) }}</td><td>KES {{ c.fee_amount|round(2) }}</td><td><span class="badge bg-{{ 'success' if c.status == 'approved' else 'warning' if c.status == 'pending' else 'danger' }}">{{ c.status|title }}</span>{% if c.auto_verified %}<span class="badge bg-success">🤖 System Verified</span>{% endif %}{% if c.status == 'pending' and c.sender_name %}{% if c.sender_name.lower().strip() == event.account_name.lower().strip() %}<span class="badge bg-success">✅ Name Match</span>{% else %}<span class="badge bg-danger">❌ Name Mismatch</span>{% endif %}{% endif %}</td><td>{% if c.payment_proof_screenshot %}<a href="{{ url_for('static', filename=c.payment_proof_screenshot.replace('static/', '')) }}" target="_blank" class="btn btn-sm btn-outline-info"><i class="bi bi-image"></i> View Proof</a>{% endif %}{% if c.status == 'pending' %}<form method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" class="d-inline"><input type="number" name="received_amount" placeholder="Amount received" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;" step="0.01" required><button type="submit" class="btn btn-sm btn-success">✅ Approve</button></form><form method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" class="d-inline"><input type="text" name="reason" placeholder="Reason" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;"><button type="submit" class="btn btn-sm btn-danger">❌ Decline</button></form>{% endif %}<a href="{{ url_for('contributor_view', token=c.token) }}" class="btn btn-sm btn-outline-info">View</a></td></tr>{% endfor %}</tbody></table></div>
+{% if contributors.pages > 1 %}<nav><ul class="pagination justify-content-center">{% if contributors.has_prev %}<li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ contributors.prev_num }}">Previous</a></li>{% endif %}<li class="page-item active"><span class="page-link bg-gold text-dark border-0">{{ contributors.page }}</span></li>{% if contributors.has_next %}<li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ contributors.next_num }}">Next</a></li>{% endif %}</ul></nav>{% endif %}
+<div class="mt-3 text-center"><a href="{{ url_for('dashboard') }}" class="text-muted-light">← Back to Dashboard</a></div>
+{% endblock %}
+"""
+
+CONTRIBUTOR_VIEW_HTML = """
+{% extends "base.html" %}
+{% block content %}
+<div class="glass-card p-4"><h2 class="golden-text">👤 {{ contrib.name }}</h2><p><strong>Phone:</strong> {{ contrib.phone }}</p><p><strong>Username:</strong> {{ contrib.username or 'Not registered' }}</p><p><strong>Pledge Amount:</strong> KES {{ contrib.pledge_amount|round(2) }}</p><p><strong>Amount Paid:</strong> KES {{ contrib.paid_amount|round(2) }}</p><p><strong>Fee (2%):</strong> KES {{ contrib.fee_amount|round(2) }}</p><p><strong>Net Contribution:</strong> KES {{ contrib.net_contribution|round(2) }}</p><p><strong>Sender Name (from proof):</strong> {{ contrib.sender_name or 'Not provided' }}</p><p><strong>Status:</strong> <span class="badge bg-{{ 'success' if contrib.status == 'approved' else 'warning' if contrib.status == 'pending' else 'danger' }}">{{ contrib.status|title }}</span>{% if contrib.auto_verified %}<span class="badge bg-success">🤖 System Verified</span>{% endif %}</p>{% if contrib.status == 'pending' %}<div class="alert alert-warning"><i class="bi bi-clock"></i> Your contribution is pending admin approval.{% if contrib.sender_name and contrib.sender_name.lower().strip() == event.account_name.lower().strip() %}<br>✅ The system has verified your name matches the account.{% elif contrib.sender_name %}<br>⚠️ Your sender name doesn't match the account name. Admin will review.{% endif %}</div>{% elif contrib.status == 'approved' and contrib.auto_verified %}<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> ✅ Your payment was system-verified and approved!</div>{% elif contrib.status == 'approved' %}<div class="alert alert-success"><i class="bi bi-check-circle"></i> ✅ Your contribution has been approved by the admin.</div>{% endif %}</div>
+<div class="glass-card p-4 mt-3"><h5 class="golden-text">📎 Submit Payment Proof</h5><form method="POST" action="{{ url_for('submit_payment_proof', token=contrib.token) }}" enctype="multipart/form-data"><div class="mb-2"><label class="form-label">Payment Screenshot</label><input type="file" name="screenshot" class="form-control bg-dark text-light" accept="image/*"></div><div class="mb-2"><label class="form-label">Additional Info (transaction code, etc.)</label><textarea name="payment_proof_text" class="form-control bg-dark text-light" rows="2">{{ contrib.payment_proof_text or '' }}</textarea></div><button type="submit" class="btn btn-gold">Submit Proof</button></form></div>
+{% if contrib.payment_proof_screenshot %}<div class="glass-card p-4 mt-3"><h5 class="golden-text">📸 Your Payment Screenshot</h5><a href="{{ url_for('static', filename=contrib.payment_proof_screenshot.replace('static/', '')) }}" target="_blank"><img src="{{ url_for('static', filename=contrib.payment_proof_screenshot.replace('static/', '')) }}" alt="Payment proof" style="max-width:100%; max-height:300px; border-radius:12px; border:2px solid var(--gold);"></a><p class="text-muted-light small mt-1"><i class="bi bi-eye"></i> Click to view full size</p></div>{% endif %}
+<div class="glass-card p-4 mt-3"><h5 class="golden-text">💳 Payment History</h5>{% if show_payments and payments %}<ul class="list-group list-group-flush bg-transparent">{% for p in payments %}<li class="list-group-item bg-transparent text-light d-flex justify-content-between"><span>KES {{ p.amount|round(2) }}</span><span class="text-muted-light">{{ p.date_paid.strftime('%Y-%m-%d %H:%M') }}</span></li>{% endfor %}</ul>{% elif show_payments and not payments %}<p class="text-muted-light">No payments recorded yet.</p>{% else %}<p class="text-muted-light"><i class="bi bi-lock"></i> Payment history will be available after 7 days.<br><small>Contact the event admin if you need it earlier.</small></p>{% endif %}</div>
+<div class="glass-card p-4 mt-3 text-center"><a href="{{ url_for('contributor_chat', token=contrib.token) }}" class="btn btn-outline-gold"><i class="bi bi-chat-dots"></i> Chat with Admin</a></div>
+{% if contrib.status == 'approved' and contrib.completed_at %}{% if is_admin_user %}<div class="glass-card p-4 mt-3 text-center"><a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold"><i class="bi bi-file-pdf"></i> Download Receipt (PDF) – Admin</a></div>{% elif is_contributor_owner and (now - contrib.completed_at).days >= 7 %}<div class="glass-card p-4 mt-3 text-center"><a href="{{ url_for('contributor_receipt', token=contrib.token) }}" class="btn btn-gold"><i class="bi bi-file-pdf"></i> Download Receipt (PDF)</a></div>{% elif is_contributor_owner %}<div class="glass-card p-4 mt-3 text-center text-muted-light"><i class="bi bi-clock"></i> Receipt will be available after 7 days.<br><small>Contact the event admin if you need it earlier.</small></div>{% endif %}{% endif %}
+<div class="mt-3 text-center"><a href="{{ url_for('manage_contributors', token=event.token) if is_admin_user else url_for('contributor_dashboard') }}" class="text-muted-light">← Back to {{ 'Contributors' if is_admin_user else 'Dashboard' }}</a></div>
+{% endblock %}
+"""
 
 # ---------- ROUTES ----------
 @app.route('/')
@@ -509,7 +656,6 @@ def logout():
     flash('Logged out.', 'info')
     return redirect(url_for('login'))
 
-# ---------- DASHBOARD (MINIMAL WORKING VERSION) ----------
 @app.route('/dashboard')
 def dashboard():
     if not is_admin_logged_in():
@@ -517,8 +663,12 @@ def dashboard():
     admin = get_admin()
     if admin.is_super_admin:
         return redirect(url_for('super_dashboard'))
-    events = Event.query.filter_by(admin_id=admin.id).all()
-    return f"<h1>Welcome {admin.username}!</h1><p>You have {len(events)} events.</p><a href='/logout'>Logout</a>"
+    page = request.args.get('page', 1, type=int)
+    events = Event.query.filter_by(admin_id=admin.id).order_by(desc(Event.created_at)).paginate(page=page, per_page=10)
+    total_raised = sum(get_event_total_contributions(e.id) for e in events.items)
+    pending_count = Contributor.query.filter_by(status='pending').join(Event).filter(Event.admin_id == admin.id).count()
+    return render_template_string(DASHBOARD_HTML, admin=admin, events=events, total_raised=total_raised,
+                                  pending_contributions=pending_count)
 
 @app.route('/super-dashboard')
 def super_dashboard():
@@ -528,16 +678,28 @@ def super_dashboard():
     if not admin.is_super_admin:
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
-    return f"<h1>👑 Super Admin: {admin.username}</h1><p>You control everything!</p><a href='/logout'>Logout</a>"
+    total_events = Event.query.count()
+    total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status='approved').scalar() or 0
+    total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status='approved').scalar() or 0
+    pending_withdrawals = Withdrawal.query.filter_by(status='pending').count()
+    locked_events = Event.query.filter(Event.disabled == True).count()
+    pending_feature_requests = FeatureRequest.query.filter_by(status='pending').count()
+    contact_messages_count = ContactMessage.query.filter_by(is_read=False).count()
+    admins = Admin.query.all()
+    can_withdraw = total_fees >= MINIMUM_WITHDRAWAL_FEE
+    return render_template_string(SUPER_DASHBOARD_HTML, admin=admin, total_events=total_events,
+                                  total_contributions=total_contributions, total_fees=total_fees,
+                                  pending_withdrawals=pending_withdrawals, locked_events=locked_events,
+                                  admins=admins, pending_feature_requests=pending_feature_requests,
+                                  contact_messages_count=contact_messages_count, can_withdraw=can_withdraw)
 
-# ---------- CREATE EVENT ----------
 @app.route('/events/create', methods=['GET', 'POST'])
 def create_event():
     if not is_admin_logged_in():
         return redirect(url_for('login'))
     admin = get_admin()
     if admin.is_super_admin:
-        flash('Super admins cannot create events.', 'error')
+        flash('Super admins cannot create events. Use a normal admin account.', 'error')
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
         token = generate_unique_token()
@@ -545,70 +707,469 @@ def create_event():
             token = generate_unique_token()
         event = Event(
             token=token, admin_id=admin.id,
+            event_type=request.form.get('event_type'),
             title=request.form.get('title'),
             description=request.form.get('description'),
             target_amount=float(request.form.get('target_amount', 0)),
             deadline=datetime.strptime(request.form.get('deadline'), '%Y-%m-%dT%H:%M'),
             event_date=datetime.strptime(request.form.get('event_date'), '%Y-%m-%dT%H:%M'),
-            account_name=request.form.get('account_name')
+            picture_url=request.form.get('picture_url'),
+            background_image_url=request.form.get('background_image_url'),
+            account_name=request.form.get('account_name'),
+            paybill=request.form.get('paybill'),
+            mpesa_number=request.form.get('mpesa_number'),
+            till_number=request.form.get('till_number'),
+            bank_name=request.form.get('bank_name'),
+            bank_account_name=request.form.get('bank_account_name'),
+            bank_account_number=request.form.get('bank_account_number'),
+            payment_instructions=request.form.get('payment_instructions'),
+            whatsapp_contact=request.form.get('whatsapp_contact'),
+            grace_period=int(request.form.get('grace_period', 0)),
+            has_grace_period=bool(request.form.get('has_grace_period', False))
         )
         db.session.add(event)
         db.session.commit()
         flash('Event created!', 'success')
         return redirect(url_for('dashboard'))
-    return render_template_string("""
-    <h1>Create Event</h1>
-    <form method="POST">
-    <input type="text" name="title" placeholder="Title" required><br>
-    <textarea name="description" placeholder="Description"></textarea><br>
-    <input type="number" name="target_amount" placeholder="Target" step="0.01" required><br>
-    <input type="datetime-local" name="event_date" required><br>
-    <input type="datetime-local" name="deadline" required><br>
-    <input type="text" name="account_name" placeholder="Account Name" required><br>
-    <button type="submit">Create</button>
-    </form>
-    <a href="/dashboard">Back</a>
-    """)
+    return render_template_string(CREATE_EVENT_HTML)
 
 @app.route('/events/<token>')
 def event_landing(token):
     event = Event.query.filter_by(token=token).first_or_404()
-    return f"<h1>{event.title}</h1><p>{event.description}</p><p>Account: {event.account_name}</p><a href='/dashboard'>Back</a>"
+    if not event.is_active:
+        flash('Event inactive.', 'error')
+        return redirect(url_for('dashboard'))
+    if get_page_lock_status(event):
+        return render_template_string("""<h1>Event Locked</h1><p>Contact admin.</p>""")
+    contributor = None
+    if is_contributor_logged_in():
+        contributor = get_contributor()
+    contributions = Contributor.query.filter_by(event_id=event.id, status='approved').order_by(desc(Contributor.created_at)).all()
+    total_raised = get_event_total_contributions(event.id)
+    chat_messages = ChatMessage.query.filter_by(event_id=event.id).order_by(ChatMessage.timestamp).limit(50).all()
+    testimonials = Testimonial.query.filter_by(event_id=event.id).order_by(desc(Testimonial.created_at)).limit(10).all()
+    days = (datetime.utcnow() - event.created_at).days + 1
+    daily_note = get_daily_note(event.event_type, days)
+    return render_template_string(EVENT_LANDING_HTML, event=event, total_raised=total_raised,
+                                  chat_messages=chat_messages, testimonials=testimonials, daily_note=daily_note,
+                                  contributor=contributor)
 
-# ---------- CONTACT ----------
+@app.route('/events/<token>/edit', methods=['GET', 'POST'])
+def edit_event(token):
+    flash('Edit event feature coming soon.', 'info')
+    return redirect(url_for('dashboard'))
+
+@app.route('/events/<token>/delete', methods=['POST'])
+def delete_event(token):
+    flash('Delete event feature coming soon.', 'info')
+    return redirect(url_for('dashboard'))
+
+@app.route('/events/<token>/toggle-active', methods=['POST'])
+def toggle_event_active(token):
+    flash('Toggle active feature coming soon.', 'info')
+    return redirect(url_for('dashboard'))
+
+@app.route('/events/<token>/lock-page', methods=['POST'])
+def lock_event_page(token):
+    flash('Lock page feature coming soon.', 'info')
+    return redirect(url_for('dashboard'))
+
+@app.route('/events/<token>/contributors')
+def manage_contributors(token):
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    event = Event.query.filter_by(token=token).first_or_404()
+    admin = get_admin()
+    if event.admin_id != admin.id and not admin.is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('dashboard'))
+    page = request.args.get('page', 1, type=int)
+    contributors = Contributor.query.filter_by(event_id=event.id).order_by(desc(Contributor.created_at)).paginate(page=page, per_page=15)
+    return render_template_string(CONTRIBUTORS_HTML, event=event, contributors=contributors)
+
+@app.route('/events/<token>/contributor/add', methods=['POST'])
+def add_contributor(token):
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    event = Event.query.filter_by(token=token).first_or_404()
+    admin = get_admin()
+    if event.admin_id != admin.id and not admin.is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('dashboard'))
+    name = request.form.get('name', '').strip()
+    phone = request.form.get('phone', '').strip()
+    pledge = float(request.form.get('pledge_amount', 0))
+    if not name or not phone or pledge <= 0:
+        flash('All fields required.', 'error')
+        return redirect(url_for('manage_contributors', token=token))
+    ct = generate_unique_token()
+    while Contributor.query.filter_by(token=ct).first():
+        ct = generate_unique_token()
+    contrib = Contributor(
+        event_id=event.id, token=ct, pin=generate_pin(),
+        name=name, phone=phone, pledge_amount=pledge,
+        status='pending'
+    )
+    db.session.add(contrib)
+    db.session.commit()
+    if not event.first_contribution_date:
+        event.first_contribution_date = datetime.utcnow()
+        db.session.commit()
+    flash('Contributor added.', 'success')
+    return redirect(url_for('manage_contributors', token=event.token))
+
+@app.route('/contributor/<token>')
+def contributor_view(token):
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    event = Event.query.get(contrib.event_id)
+    payments = Payment.query.filter_by(contributor_id=contrib.id).all()
+    show_payments = False
+    if contrib.completed_at and (datetime.utcnow() - contrib.completed_at).days >= 7:
+        show_payments = True
+    conv = Conversation.query.filter_by(event_id=event.id, admin_id=event.admin_id, contributor_id=contrib.id).first()
+    if not conv:
+        conv = Conversation(event_id=event.id, admin_id=event.admin_id, contributor_id=contrib.id)
+        db.session.add(conv)
+        db.session.commit()
+    is_admin_user = is_admin_logged_in()
+    is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
+    return render_template_string(CONTRIBUTOR_VIEW_HTML, contrib=contrib, event=event, payments=payments,
+                                  show_payments=show_payments, is_admin_user=is_admin_user,
+                                  is_contributor_owner=is_contributor_owner, now=datetime.utcnow())
+
+@app.route('/contributor/<token>/approve', methods=['POST'])
+def approve_contributor(token):
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if admin.is_super_admin:
+        flash('Super admins cannot approve contributions.', 'error')
+        return redirect(url_for('super_dashboard'))
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    event = Event.query.get(contrib.event_id)
+    if event.admin_id != admin.id:
+        flash('Not your event.', 'error')
+        return redirect(url_for('dashboard'))
+    if contrib.status == 'pending':
+        received = float(request.form.get('received_amount', contrib.pledge_amount))
+        if received > 0:
+            fee = calculate_fee(received, event.admin_id)
+            net = received - fee
+            contrib.paid_amount = received
+            contrib.fee_amount = fee
+            contrib.net_contribution = net
+            contrib.status = 'approved'
+            contrib.completed_at = datetime.utcnow()
+            payment = Payment(contributor_id=contrib.id, amount=received, note=f'Approved. Fee: KES {fee}')
+            db.session.add(payment)
+            db.session.commit()
+            flash(f'Approved! Fee: KES {fee}', 'success')
+        else:
+            flash('Amount must be > 0.', 'error')
+    else:
+        flash('Already processed.', 'info')
+    return redirect(url_for('manage_contributors', token=event.token))
+
+@app.route('/contributor/<token>/decline', methods=['POST'])
+def decline_contributor(token):
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if admin.is_super_admin:
+        flash('Super admins cannot decline contributions.', 'error')
+        return redirect(url_for('super_dashboard'))
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    event = Event.query.get(contrib.event_id)
+    if event.admin_id != admin.id:
+        flash('Not your event.', 'error')
+        return redirect(url_for('dashboard'))
+    if contrib.status == 'pending':
+        reason = request.form.get('reason', 'No reason provided.')
+        contrib.status = 'declined'
+        contrib.decline_reason = reason
+        db.session.commit()
+        flash('Contribution declined.', 'warning')
+    else:
+        flash('Already processed.', 'info')
+    return redirect(url_for('manage_contributors', token=event.token))
+
+@app.route('/contributor/<token>/payment-proof', methods=['POST'])
+def submit_payment_proof(token):
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    event = Event.query.get(contrib.event_id)
+    sender_name = request.form.get('sender_name', '').strip()
+    text = request.form.get('payment_proof_text', '').strip()
+    file = request.files.get('screenshot')
+    file_path = None
+    if file and file.filename:
+        ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+        filename = f"proof_{contrib.token}_{int(datetime.utcnow().timestamp())}.{ext}"
+        file_path = os.path.join('static/uploads/proofs', filename)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        file.save(file_path)
+        file_path = file_path.replace('\\', '/')
+    contrib.payment_proof_screenshot = file_path
+    contrib.payment_proof_text = text
+    contrib.sender_name = sender_name
+    auto_verified = False
+    if event.account_name and sender_name:
+        if sender_name.lower().strip() == event.account_name.lower().strip():
+            auto_verified = True
+    contrib.auto_verified = auto_verified
+    db.session.commit()
+    admin = Admin.query.get(event.admin_id)
+    create_notification(admin.id, f'Payment proof from {contrib.name}. Verified: {auto_verified}', 'info', event.id, contrib.id)
+    flash('Proof submitted.', 'info')
+    return redirect(url_for('contributor_view', token=contrib.token))
+
+@app.route('/contributor/<token>/receipt')
+def contributor_receipt(token):
+    contrib = Contributor.query.filter_by(token=token).first_or_404()
+    if contrib.status != 'approved' or not contrib.completed_at:
+        flash('Only approved contributions have receipts.', 'error')
+        return redirect(url_for('contributor_view', token=token))
+    is_admin_user = is_admin_logged_in()
+    is_contributor_owner = is_contributor_logged_in() and get_contributor().id == contrib.id
+    if not is_admin_user:
+        if (datetime.utcnow() - contrib.completed_at).days < 7:
+            flash('Receipt available after 7 days.', 'error')
+            return redirect(url_for('contributor_view', token=token))
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, height - 50, "CONTRIBUTION RECEIPT")
+    p.setFont("Helvetica", 12)
+    p.drawString(50, height - 80, f"Name: {contrib.name}")
+    p.drawString(50, height - 100, f"Phone: {contrib.phone}")
+    p.drawString(50, height - 120, f"Amount Paid: KES {contrib.paid_amount:,.2f}")
+    p.drawString(50, height - 140, f"Fee: KES {contrib.fee_amount:,.2f}")
+    p.drawString(50, height - 160, f"Net: KES {contrib.net_contribution:,.2f}")
+    p.drawString(50, height - 180, f"Event: {contrib.event.title}")
+    p.drawString(50, height - 200, f"Date: {contrib.completed_at.strftime('%Y-%m-%d %H:%M')}")
+    p.drawString(50, height - 220, f"Receipt #: {contrib.token}")
+    p.save()
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=f"receipt_{contrib.token}.pdf", mimetype='application/pdf')
+
+@app.route('/chat/admin')
+def admin_chat_list():
+    return "Admin chat list – under construction"
+
+@app.route('/chat/admin/<int:conv_id>')
+def admin_chat(conv_id):
+    return "Admin chat – under construction"
+
+@app.route('/chat/contributor/<token>')
+def contributor_chat(token):
+    return "Contributor chat – under construction"
+
+@app.route('/feature-request', methods=['GET', 'POST'])
+@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])
+def submit_feature_request(event_token=None):
+    flash('Feature request – under construction', 'info')
+    return redirect(url_for('index'))
+
+@app.route('/manage-feature-requests')
+def manage_feature_requests():
+    return redirect(url_for('super_dashboard'))
+
+@app.route('/feature-request/<int:req_id>/update', methods=['POST'])
+def update_feature_request(req_id):
+    return redirect(url_for('super_dashboard'))
+
+@app.route('/contact-super', methods=['GET', 'POST'])
+def contact_super():
+    flash('Contact super admin – under construction', 'info')
+    return redirect(url_for('dashboard'))
+
+@app.route('/withdrawals')
+def withdrawals():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('login'))
+    wd_list = Withdrawal.query.order_by(desc(Withdrawal.created_at)).all()
+    return render_template_string("""
+    <h2>Withdrawals</h2><ul>{% for w in withdrawals %}<li>{{ w.amount }} - {{ w.status }}</li>{% endfor %}</ul>
+    """, withdrawals=wd_list)
+
+@app.route('/withdrawal/request', methods=['POST'])
+def request_withdrawal():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('login'))
+    amount = float(request.form.get('amount', 0))
+    phone = request.form.get('phone', '').strip()
+    if amount < MINIMUM_WITHDRAWAL_FEE:
+        flash(f'Minimum withdrawal is KES {MINIMUM_WITHDRAWAL_FEE}.', 'error')
+        return redirect(url_for('super_dashboard'))
+    total_fees = get_global_total_fees()
+    if amount > total_fees:
+        flash('Insufficient fees.', 'error')
+        return redirect(url_for('super_dashboard'))
+    wd = Withdrawal(admin_id=get_admin().id, amount=amount, phone=phone, method='mpesa', status='pending')
+    db.session.add(wd)
+    db.session.commit()
+    flash('Withdrawal request submitted.', 'success')
+    return redirect(url_for('super_dashboard'))
+
+@app.route('/withdrawal/<int:wid>/update', methods=['POST'])
+def update_withdrawal(wid):
+    flash('Withdrawal update not implemented.', 'info')
+    return redirect(url_for('withdrawals'))
+
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
     if request.method == 'POST':
         name = request.form.get('name')
         email = request.form.get('email')
+        phone = request.form.get('phone')
         subject = request.form.get('subject')
         message = request.form.get('message')
         if not all([name, email, subject, message]):
             flash('All fields required.', 'error')
             return redirect(url_for('contact'))
-        msg = ContactMessage(name=name, email=email, phone=request.form.get('phone'), subject=subject, message=message)
+        msg = ContactMessage(name=name, email=email, phone=phone, subject=subject, message=message)
         db.session.add(msg)
         db.session.commit()
         flash('Message sent!', 'success')
         return redirect(url_for('contact'))
     return render_template_string("""
-    <h1>📩 Contact Us</h1>
-    <form method="POST">
-    <input type="text" name="name" placeholder="Your Name" required><br>
-    <input type="email" name="email" placeholder="Your Email" required><br>
-    <input type="tel" name="phone" placeholder="Phone (optional)"><br>
-    <input type="text" name="subject" placeholder="Subject" required><br>
-    <textarea name="message" placeholder="Your Message" rows="4" required></textarea><br>
-    <button type="submit">Send</button>
-    </form>
-    <p><strong>WhatsApp:</strong> {{ support_whatsapp }}</p>
-    <p><strong>Email:</strong> {{ support_email }}</p>
-    <a href="/">Back</a>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="row justify-content-center"><div class="col-md-6"><div class="glass-card p-4"><h3 class="golden-text text-center">📩 Contact Us</h3><hr><form method="POST"><div class="mb-2"><input type="text" name="name" placeholder="Your Name" class="form-control bg-dark text-light" required></div><div class="mb-2"><input type="email" name="email" placeholder="Email" class="form-control bg-dark text-light" required></div><div class="mb-2"><input type="tel" name="phone" placeholder="Phone (optional)" class="form-control bg-dark text-light"></div><div class="mb-2"><input type="text" name="subject" placeholder="Subject" class="form-control bg-dark text-light" required></div><div class="mb-2"><textarea name="message" placeholder="Message" class="form-control bg-dark text-light" rows="4" required></textarea></div><button type="submit" class="btn btn-gold w-100">Send</button></form><div class="mt-3 text-center"><p><strong>WhatsApp:</strong> {{ support_whatsapp }}</p><p><strong>Email:</strong> {{ support_email }}</p></div></div></div></div>
+    {% endblock %}
     """)
 
+@app.route('/contact-messages')
+def contact_messages():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('login'))
+    return "<h1>Contact messages – coming soon</h1>"
+
+@app.route('/contact-message/<int:mid>/read', methods=['POST'])
+def mark_contact_read(mid):
+    return redirect(url_for('contact_messages'))
+
+@app.route('/notifications')
+def notifications():
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    notifs = Notification.query.filter_by(admin_id=get_admin().id).order_by(desc(Notification.created_at)).limit(100).all()
+    return render_template_string("""
+    <h2>Notifications</h2><ul>{% for n in notifications %}<li>{{ n.message }} - {{ n.created_at }}</li>{% endfor %}</ul>
+    """, notifications=notifs)
+
+@app.route('/notification/<int:nid>/read', methods=['POST'])
+def mark_notification_read(nid):
+    return jsonify({'success': True})
+
+@app.route('/notification/mark-all-read', methods=['POST'])
+def mark_all_notifications_read():
+    return jsonify({'success': True})
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if not is_admin_logged_in() or not get_admin().is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('login'))
+    return "<h1>Settings – under construction</h1>"
+
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
+    if not is_admin_logged_in():
+        return redirect(url_for('login'))
+    admin = get_admin()
+    if request.method == 'POST':
+        admin.email = request.form.get('email', admin.email)
+        admin.phone = request.form.get('phone', admin.phone)
+        new_pass = request.form.get('new_password')
+        if new_pass:
+            admin.password_hash = hash_password(new_pass)
+        db.session.commit()
+        flash('Profile updated.', 'success')
+        return redirect(url_for('profile'))
+    return render_template_string("""
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="row justify-content-center"><div class="col-md-6"><div class="glass-card p-4"><h3 class="golden-text text-center">👤 My Profile</h3><form method="POST"><div class="mb-3"><label class="form-label">Username</label><input type="text" class="form-control bg-dark text-light" value="{{ admin.username }}" disabled></div><div class="mb-3"><label class="form-label">Email</label><input type="email" name="email" class="form-control bg-dark text-light" value="{{ admin.email }}"></div><div class="mb-3"><label class="form-label">Phone</label><input type="tel" name="phone" class="form-control bg-dark text-light" value="{{ admin.phone or '' }}"></div><div class="mb-3"><label class="form-label">Referral Code</label><input type="text" class="form-control bg-dark text-light" value="{{ admin.referral_code }}" disabled></div><hr><h5 class="golden-text">Change Password</h5><div class="mb-3"><label class="form-label">New Password</label><input type="password" name="new_password" class="form-control bg-dark text-light" placeholder="Leave blank to keep current"></div><button type="submit" class="btn btn-gold w-100">Update Profile</button></form></div></div></div>
+    {% endblock %}
+    """, admin=admin)
+
+@app.route('/help')
+def help_page():
+    return render_template_string("""
+    <h1>Help & Guide</h1><p>Coming soon.</p>
+    """)
+
+@app.route('/contributor/register', methods=['GET', 'POST'])
+def contributor_register():
+    flash('Contributor registration – under construction', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/contributor/login', methods=['GET', 'POST'])
+def contributor_login():
+    flash('Contributor login – under construction', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/contributor/logout')
+def contributor_logout():
+    session.pop('contributor_id', None)
+    flash('Logged out.', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/contributor/dashboard')
+def contributor_dashboard():
+    return redirect(url_for('login'))
+
+@app.route('/manage-admins')
+def manage_admins():
+    return redirect(url_for('super_dashboard'))
+
+@app.route('/admin/<int:aid>/toggle', methods=['POST'])
+def toggle_admin(aid):
+    return redirect(url_for('manage_admins'))
+
+@app.route('/admin/<int:aid>/delete', methods=['POST'])
+def delete_admin(aid):
+    return redirect(url_for('manage_admins'))
+
+@app.route('/events/<token>/pay-fee', methods=['POST'])
+def pay_event_fee(token):
+    return redirect(url_for('super_dashboard'))
+
+@app.route('/events/<token>/request-unlock', methods=['POST'])
+def request_unlock(token):
+    return redirect(url_for('dashboard'))
+
+@app.route('/add_testimonial', methods=['POST'])
+@app.route('/add_testimonial/<token>', methods=['POST'])
+def add_testimonial(token=None):
+    flash('Testimonial submitted.', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    return "<h1>Forgot password – under construction</h1>"
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    return "<h1>Reset password – under construction</h1>"
+
 # ---------- SCHEDULER ----------
+def check_pending_contributions():
+    with app.app_context():
+        pending = Contributor.query.filter_by(status='pending').all()
+        for c in pending:
+            event = Event.query.get(c.event_id)
+            if event:
+                admin = Admin.query.get(event.admin_id)
+                if admin:
+                    create_notification(admin.id, f'Pending contribution from {c.name}', 'reminder', event.id, c.id)
+
 scheduler = BackgroundScheduler()
-scheduler.add_job(lambda: None, 'interval', hours=3)  # Placeholder
+scheduler.add_job(check_pending_contributions, 'interval', hours=3)
 scheduler.start()
 
 # ---------- MAIN ----------
