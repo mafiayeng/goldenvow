@@ -1,104 +1,42 @@
 {% extends "base.html" %}
 {% block title %}Create Event{% endblock %}
 {% block content %}
-<h2 class="golden-text">✨ Create New Event</h2>
-<div class="glass-card p-4">
-    <form method="POST" class="row g-3">
-        <div class="col-md-6">
-            <label class="form-label">Event Type</label>
-            <select name="event_type" class="form-select bg-dark text-light">
-                <option value="dowry">🐂 Dowry</option>
-                <option value="burial">🕊️ Burial</option>
-                <option value="medical">❤️ Medical</option>
-                <option value="education">🎓 Education</option>
-                <option value="harambee">🤝 Harambee</option>
-                <option value="other">✦ Other</option>
-            </select>
-        </div>
-        <div class="col-md-6">
-            <label class="form-label">Event Title <span class="text-danger">*</span></label>
-            <input type="text" name="title" class="form-control bg-dark text-light" required>
-        </div>
-        <div class="col-12">
-            <label class="form-label">Description</label>
-            <textarea name="description" class="form-control bg-dark text-light" rows="3"></textarea>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Target Amount (KES) <span class="text-danger">*</span></label>
-            <input type="number" name="target_amount" class="form-control bg-dark text-light" step="0.01" required>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Event Date <span class="text-danger">*</span></label>
-            <input type="datetime-local" name="event_date" class="form-control bg-dark text-light" required>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Deadline <span class="text-danger">*</span></label>
-            <input type="datetime-local" name="deadline" class="form-control bg-dark text-light" required>
-        </div>
-        <div class="col-12">
-            <label class="form-label">Picture URL (optional)</label>
-            <input type="url" name="picture_url" class="form-control bg-dark text-light" placeholder="https://example.com/image.jpg">
-        </div>
-        <div class="col-12">
-            <label class="form-label">Background Image URL (optional)</label>
-            <input type="url" name="background_image_url" class="form-control bg-dark text-light" placeholder="https://example.com/bg.jpg">
-        </div>
-        <h5 class="golden-text mt-3">💳 Payment Details</h5>
-        <div class="col-md-12">
-            <label class="form-label">Account Name (M-Pesa/Bank Account Holder) <span class="text-danger">*</span></label>
-            <input type="text" name="account_name" class="form-control bg-dark text-light" placeholder="e.g. Alex Kiprop" required>
-            <div class="text-muted-light small mt-1">
-                <i class="bi bi-info-circle"></i> 
-                This is the name contributors will see when sending money. 
-                <strong>Important:</strong> The system will use this name to verify payments.
+<div class="container">
+    <h2 class="golden-text">Create Event</h2>
+    <div class="glass-card p-4">
+        <form method="POST">
+            <div class="row">
+                <div class="col-md-6"><label>Event Type</label><select name="event_type" class="form-select"><option value="dowry">Dowry</option><option value="burial">Burial</option><option value="medical">Medical</option><option value="education">Education</option><option value="harambee">Harambee</option><option value="other">Other</option></select></div>
+                <div class="col-md-6"><label>Title</label><input type="text" name="title" class="form-control" required></div>
             </div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Paybill</label>
-            <input type="text" name="paybill" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">M-Pesa Number</label>
-            <input type="text" name="mpesa_number" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Till Number</label>
-            <input type="text" name="till_number" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">WhatsApp Contact</label>
-            <input type="text" name="whatsapp_contact" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Name</label>
-            <input type="text" name="bank_name" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Account Name</label>
-            <input type="text" name="bank_account_name" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Account Number</label>
-            <input type="text" name="bank_account_number" class="form-control bg-dark text-light">
-        </div>
-        <div class="col-12">
-            <label class="form-label">Payment Instructions</label>
-            <textarea name="payment_instructions" class="form-control bg-dark text-light" rows="2"></textarea>
-        </div>
-        <div class="col-md-6">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="has_grace_period" value="1">
-                <label class="form-check-label">Enable Grace Period</label>
+            <div class="mb-2"><label>Description</label><textarea name="description" class="form-control" rows="3"></textarea></div>
+            <div class="row">
+                <div class="col-md-4"><label>Target (KES)</label><input type="number" name="target_amount" class="form-control" step="0.01" required></div>
+                <div class="col-md-4"><label>Event Date</label><input type="datetime-local" name="event_date" class="form-control" required></div>
+                <div class="col-md-4"><label>Deadline</label><input type="datetime-local" name="deadline" class="form-control" required></div>
             </div>
-        </div>
-        <div class="col-md-6">
-            <label class="form-label">Grace Period (days)</label>
-            <input type="number" name="grace_period" class="form-control bg-dark text-light" value="0">
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-gold">🚀 Create Event</button>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
-        </div>
-    </form>
+            <div class="mb-2"><label>Picture URL</label><input type="url" name="picture_url" class="form-control"></div>
+            <div class="mb-2"><label>Background Image URL</label><input type="url" name="background_image_url" class="form-control"></div>
+            <h5 class="golden-text mt-3">Payment Details</h5>
+            <div class="mb-2"><label>Account Name (required)</label><input type="text" name="account_name" class="form-control" required></div>
+            <div class="row">
+                <div class="col-md-3"><label>Paybill</label><input type="text" name="paybill" class="form-control"></div>
+                <div class="col-md-3"><label>M-Pesa</label><input type="text" name="mpesa_number" class="form-control"></div>
+                <div class="col-md-3"><label>Till</label><input type="text" name="till_number" class="form-control"></div>
+                <div class="col-md-3"><label>WhatsApp</label><input type="text" name="whatsapp_contact" class="form-control"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4"><label>Bank Name</label><input type="text" name="bank_name" class="form-control"></div>
+                <div class="col-md-4"><label>Bank Account Name</label><input type="text" name="bank_account_name" class="form-control"></div>
+                <div class="col-md-4"><label>Bank Account Number</label><input type="text" name="bank_account_number" class="form-control"></div>
+            </div>
+            <div class="mb-2"><label>Payment Instructions</label><textarea name="payment_instructions" class="form-control" rows="2"></textarea></div>
+            <div class="row">
+                <div class="col-md-6"><div class="form-check"><input type="checkbox" name="has_grace_period" value="1" class="form-check-input"><label>Enable Grace Period</label></div></div>
+                <div class="col-md-6"><label>Grace Period (days)</label><input type="number" name="grace_period" class="form-control" value="0"></div>
+            </div>
+            <button type="submit" class="btn btn-gold mt-3">Create</button>
+        </form>
+    </div>
 </div>
 {% endblock %}
