@@ -1,108 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+<div class="d-flex justify-content-between align-items-center flex-wrap">
     <h2 class="golden-text">👋 Welcome, {{ admin.username }}</h2>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('contact_super') }}" class="btn btn-outline-gold">
-            <i class="bi bi-envelope"></i> Contact Super Admin
-        </a>
-        <a href="{{ url_for('create_event') }}" class="btn btn-gold">
-            <i class="bi bi-plus-circle"></i> New Event
-        </a>
+    <div>
+        <a href="/contact-super" class="btn btn-outline-gold">Contact Super Admin</a>
+        <a href="{{ url_for('create_event') }}" class="btn btn-gold">New Event</a>
     </div>
 </div>
-
-<!-- Quick Tips -->
-<div class="glass-card p-3 mb-4">
-    <h5 class="golden-text"><i class="bi bi-lightbulb"></i> Quick Tips</h5>
-    <ul class="text-muted-light">
-        <li>🔑 <strong>Account Name:</strong> Always set the exact name contributors will see when sending money. The system will use this for verification.</li>
-        <li>📸 <strong>Payment Proof:</strong> Contributors upload screenshots. You review and click <strong>Approve</strong>.</li>
-        <li>📖 <strong>Full Guide:</strong> Click <a href="{{ url_for('help_page') }}" class="golden-text">Help</a> for detailed instructions.</li>
-        <li>⚠️ <strong>Event Locking:</strong> If fees reach KES 50+, your event will lock after 3 days if not paid.</li>
+<div class="glass-card mt-3">
+    <h5 class="golden-text">Quick Tips</h5>
+    <ul>
+        <li>🔑 Account Name: set the exact name contributors will see.</li>
+        <li>📸 Payment Proof: review and click Approve.</li>
+        <li>⚠️ Event Locking: fees ≥ KES 50 lock after 3 days.</li>
     </ul>
 </div>
-
-<!-- Stats Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">{{ events.total }}</h3>
-            <small class="text-muted-light">Events</small>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">KES {{ total_raised|round(2)|int }}</h3>
-            <small class="text-muted-light">Total Raised</small>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">{{ pending_contributions }}</h3>
-            <small class="text-muted-light">Pending Approvals</small>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">{{ admin.referral_count }}</h3>
-            <small class="text-muted-light">Referrals</small>
-        </div>
-    </div>
+<div class="row mt-3">
+    <div class="col-3"><div class="glass-card text-center"><h3 class="golden-text">{{ events.total }}</h3><small>Events</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3 class="golden-text">KES {{ total_raised|round(2)|int }}</h3><small>Total Raised</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3 class="golden-text">{{ pending_contributions }}</h3><small>Pending Approvals</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3 class="golden-text">{{ admin.referral_count }}</h3><small>Referrals</small></div></div>
 </div>
-
-<!-- Events List -->
-<h4 class="golden-text">📋 Your Events</h4>
+<h4 class="mt-4 golden-text">Your Events</h4>
 <div class="row">
     {% for event in events.items %}
-    <div class="col-md-6 col-lg-4 mb-3">
+    <div class="col-md-4 mb-3">
         <div class="glass-card h-100 p-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5>{{ event.title }}</h5>
-                <span class="badge bg-secondary">{{ event.event_type|title }}</span>
-            </div>
-            <p class="mt-2">Raised: <strong>KES {{ get_event_total_contributions(event.id)|round(2) }}</strong> / {{ event.target_amount|round(2) }}</p>
+            <h5>{{ event.title }}</h5>
+            <p>Raised: <strong>KES {{ get_event_total_contributions(event.id)|round(2) }}</strong> / {{ event.target_amount|round(2) }}</p>
             <div class="progress" style="height:6px;">
                 <div class="progress-bar progress-bar-gold" style="width:{{ (get_event_total_contributions(event.id)/event.target_amount*100)|round(0) if event.target_amount>0 else 0 }}%;"></div>
             </div>
-            <small class="text-muted-light">Status: {{ 'Active' if event.is_active and not event.disabled else 'Inactive/Locked' }}</small>
-            {% if event.account_name %}
-            <small class="d-block text-muted-light">Account: {{ event.account_name }}</small>
-            {% endif %}
-            <div class="mt-2 d-flex flex-wrap gap-1">
-                <a href="{{ url_for('event_landing', token=event.token) }}" class="btn btn-sm btn-outline-gold">View</a>
-                <a href="{{ url_for('edit_event', token=event.token) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                <a href="{{ url_for('manage_contributors', token=event.token) }}" class="btn btn-sm btn-outline-info">Contributors</a>
-                <form method="POST" action="{{ url_for('toggle_event_active', token=event.token) }}" style="display:inline;">
-                    <button type="submit" class="btn btn-sm btn-{{ 'danger' if event.is_active else 'success' }}">
-                        {{ 'Disable' if event.is_active else 'Enable' }}
-                    </button>
-                </form>
+            <div class="mt-2">
+                <a href="/events/{{ event.token }}" class="btn btn-sm btn-outline-gold">View</a>
+                <a href="/events/{{ event.token }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                <a href="/events/{{ event.token }}/contributors" class="btn btn-sm btn-outline-info">Contributors</a>
             </div>
         </div>
     </div>
     {% else %}
-    <p class="text-muted-light">No events yet. <a href="{{ url_for('create_event') }}" class="golden-text">Create one now</a>.</p>
+    <p>No events yet.</p>
     {% endfor %}
 </div>
-
-<!-- Pagination -->
-{% if events.pages > 1 %}
-<nav>
-    <ul class="pagination justify-content-center">
-        {% if events.has_prev %}
-        <li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ events.prev_num }}">Previous</a></li>
-        {% endif %}
-        <li class="page-item active"><span class="page-link bg-gold text-dark border-0">{{ events.page }}</span></li>
-        {% if events.has_next %}
-        <li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ events.next_num }}">Next</a></li>
-        {% endif %}
-    </ul>
-</nav>
-{% endif %}
-
-<div class="mt-3 text-center">
-    <a href="{{ url_for('help_page') }}" class="text-muted-light"><i class="bi bi-question-circle"></i> Need help? Read the Admin Guide</a>
-</div>
+<a href="/help" class="text-muted-light">Need help?</a>
 {% endblock %}
