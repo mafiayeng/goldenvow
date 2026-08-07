@@ -1,196 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Super Admin Dashboard{% endblock %}
+{% block title %}Super Dashboard{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center">
     <h2 class="golden-text">👑 Super Admin Dashboard</h2>
-    <span class="badge bg-gold text-dark">You are the Super Admin</span>
 </div>
-
-<!-- Global Stats -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">{{ total_events }}</h3>
-            <small>Total Events (All Admins)</small>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">KES {{ total_contributions|round(2)|int }}</h3>
-            <small>Total Raised (Global)</small>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">KES {{ total_fees|round(2) }}</h3>
-            <small>Your Fees Collected (2%)</small>
-            {% if total_fees < minimum_withdrawal_fee %}
-            <div class="text-warning small mt-1">🔒 Need KES {{ minimum_withdrawal_fee|round(0) }} to withdraw</div>
-            {% else %}
-            <div class="text-success small mt-1">✅ Ready to withdraw!</div>
+<div class="row mt-3">
+    <div class="col-3"><div class="glass-card text-center"><h3>{{ total_events }}</h3><small>Total Events</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3>KES {{ total_contributions|round(2)|int }}</h3><small>Total Raised</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3>KES {{ total_fees|round(2) }}</h3><small>Your Fees</small></div></div>
+    <div class="col-3"><div class="glass-card text-center"><h3>{{ pending_withdrawals }}</h3><small>Pending Withdrawals</small></div></div>
+</div>
+<div class="row mt-3">
+    <div class="col-3"><a href="/manage-admins" class="btn btn-gold w-100">Manage Admins</a></div>
+    <div class="col-3"><a href="/withdrawals" class="btn btn-gold w-100">Withdrawals</a></div>
+    <div class="col-3"><a href="/settings" class="btn btn-gold w-100">Settings</a></div>
+    <div class="col-3"><a href="/manage-feature-requests" class="btn btn-gold w-100">Feature Requests</a></div>
+</div>
+<h4 class="mt-4 golden-text">All Admins</h4>
+<table class="table table-dark">
+    <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for a in admins %}
+    <tr>
+        <td>{{ a.username }}</td>
+        <td>{{ a.email }}</td>
+        <td>{% if a.is_super_admin %}Super{% else %}Admin{% endif %}</td>
+        <td>{% if a.is_active %}Active{% else %}Disabled{% endif %}</td>
+        <td>
+            {% if not a.is_super_admin %}
+            <form style="display:inline" method="POST" action="/admin/{{ a.id }}/toggle">
+                <button class="btn btn-sm btn-warning">{{ 'Disable' if a.is_active else 'Enable' }}</button>
+            </form>
             {% endif %}
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="glass-card p-3 text-center">
-            <h3 class="golden-text">{{ pending_withdrawals }}</h3>
-            <small>Pending Withdrawals</small>
-        </div>
-    </div>
-</div>
-
-<!-- Withdrawal Section -->
-<div class="glass-card p-3 mb-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <h5 class="golden-text">💰 Withdraw Your Fees</h5>
-            <p class="text-muted-light small mb-0">
-                {% if total_fees >= minimum_withdrawal_fee %}
-                ✅ You have KES {{ total_fees|round(2) }} available for withdrawal. Minimum: KES {{ minimum_withdrawal_fee|round(0) }}
-                {% else %}
-                ⚠️ You need at least KES {{ minimum_withdrawal_fee|round(0) }} to withdraw. Current: KES {{ total_fees|round(2) }}
-                {% endif %}
-            </p>
-        </div>
-        <button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#withdrawalModal" {% if total_fees < minimum_withdrawal_fee %}disabled{% endif %}>
-            <i class="bi bi-arrow-up-circle"></i> Request Withdrawal
-        </button>
-    </div>
-</div>
-
-<!-- Quick Actions -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <a href="{{ url_for('manage_admins') }}" class="text-decoration-none">
-            <div class="glass-card p-3 text-center">
-                <i class="bi bi-people fs-2 golden-text"></i>
-                <p>Manage Admins</p>
-            </div>
-        </a>
-    </div>
-    <div class="col-md-3">
-        <a href="{{ url_for('withdrawals') }}" class="text-decoration-none">
-            <div class="glass-card p-3 text-center">
-                <i class="bi bi-arrow-up-circle fs-2 golden-text"></i>
-                <p>Manage Withdrawals</p>
-            </div>
-        </a>
-    </div>
-    <div class="col-md-3">
-        <a href="{{ url_for('settings') }}" class="text-decoration-none">
-            <div class="glass-card p-3 text-center">
-                <i class="bi bi-gear fs-2 golden-text"></i>
-                <p>System Settings</p>
-            </div>
-        </a>
-    </div>
-    <div class="col-md-3">
-        <a href="{{ url_for('manage_feature_requests') }}" class="text-decoration-none">
-            <div class="glass-card p-3 text-center">
-                <i class="bi bi-lightbulb fs-2 golden-text"></i>
-                <p>Feature Requests</p>
-            </div>
-        </a>
-    </div>
-</div>
-
-<!-- All Admins -->
-<h4 class="golden-text">👥 All Admins</h4>
-<div class="table-responsive">
-    <table class="table table-dark table-hover">
-        <thead>
-            <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Referrals</th>
-                <th>Status</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for a in admins %}
-        <tr>
-            <td>{{ a.username }} {% if a.is_super_admin %}👑{% endif %}</td>
-            <td>{{ a.email }}</td>
-            <td>{{ a.referral_count }}</td>
-            <td>
-                {% if a.is_active %}
-                <span class="badge bg-success">Active</span>
-                {% else %}
-                <span class="badge bg-danger">Disabled</span>
-                {% endif %}
-            </td>
-            <td>
-                {% if not a.is_super_admin %}
-                <form method="POST" action="{{ url_for('toggle_admin', aid=a.id) }}" style="display:inline;">
-                    <button type="submit" class="btn btn-sm btn-outline-warning">
-                        {{ 'Disable' if a.is_active else 'Enable' }}
-                    </button>
-                </form>
-                <form method="POST" action="{{ url_for('delete_admin', aid=a.id) }}" style="display:inline;" onsubmit="return confirm('Delete this admin?');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                </form>
-                {% else %}
-                <span class="text-muted-light">Protected</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<!-- Locked Events -->
-{% if locked_events > 0 %}
-<div class="mt-4">
-    <div class="glass-card p-3">
-        <h5 class="golden-text">🔒 Locked Events ({{ locked_events }})</h5>
-        <p class="text-muted-light">These events are locked because fees (>= 50 bob) are overdue.</p>
-        {% for event in events if event.disabled %}
-        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2">
-            <span>{{ event.title }}</span>
-            <span class="text-muted-light small">Fee: KES {{ get_event_total_fee(event.id)|round(2) }}</span>
-            <form method="POST" action="{{ url_for('pay_event_fee', token=event.token) }}">
-                <button type="submit" class="btn btn-sm btn-gold">Mark Paid</button>
-            </form>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<!-- Withdrawal Modal -->
-<div class="modal fade" id="withdrawalModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content glass-card">
-            <div class="modal-header border-0">
-                <h5 class="modal-title golden-text">Request Withdrawal</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="{{ url_for('request_withdrawal') }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Amount (KES)</label>
-                        <input type="number" name="amount" class="form-control bg-dark text-light" step="0.01" min="{{ minimum_withdrawal_fee }}" required>
-                        <small class="text-muted-light">Minimum: KES {{ minimum_withdrawal_fee|round(0) }}. Available: KES {{ total_fees|round(2) }}</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Phone Number</label>
-                        <input type="tel" name="phone" class="form-control bg-dark text-light" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Method</label>
-                        <select name="method" class="form-select bg-dark text-light">
-                            <option value="mpesa">M-Pesa</option>
-                            <option value="bank">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer border-0">
-                    <button type="submit" class="btn btn-gold">Submit Request</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
