@@ -1,5 +1,5 @@
 # =============================================================================
-# GOLDENVOW – COMPLETE APPLICATION (UPDATED)
+# GOLDENVOW – COMPLETE APPLICATION (FULL, UPDATED)
 # =============================================================================
 import os
 import uuid
@@ -45,7 +45,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///database.db'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.permanent_session_lifetime = timedelta(days=7)  # reduced from 30
+app.permanent_session_lifetime = timedelta(days=7)
 
 # CSRF Protection
 csrf = CSRFProtect(app)
@@ -383,7 +383,6 @@ def get_global_total_fees():
     return db.session.query(func.sum(Contributor.fee_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
 
 def get_admin_total_fees(admin_id):
-    # Optimized single query
     return db.session.query(func.sum(Contributor.fee_amount))\
         .join(Event, Event.id == Contributor.event_id)\
         .filter(Event.admin_id == admin_id, Contributor.status == STATUS_APPROVED).scalar() or 0
@@ -430,6 +429,28 @@ def get_daily_note(event_type, day):
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def generate_event_logo(event, size=120):
+    """Generate an SVG logo based on event type and title."""
+    colors = {
+        'dowry': {'bg1': '#1A2A3A', 'bg2': '#D4AF37', 'symbol': '🐂', 'ring': '#D4AF37'},
+        'burial': {'bg1': '#2C2C2C', 'bg2': '#C0C0C0', 'symbol': '🕊️', 'ring': '#C0C0C0'},
+        'medical': {'bg1': '#C62828', 'bg2': '#FFFFFF', 'symbol': '❤️', 'ring': '#C62828'},
+        'education': {'bg1': '#1565C0', 'bg2': '#D4AF37', 'symbol': '🎓', 'ring': '#1565C0'},
+        'harambee': {'bg1': '#2E7D32', 'bg2': '#D4AF37', 'symbol': '🤝', 'ring': '#2E7D32'},
+        'other': {'bg1': '#6A1B9A', 'bg2': '#D4AF37', 'symbol': '✦', 'ring': '#6A1B9A'}
+    }
+    c = colors.get(event.event_type, colors['other'])
+    initials = ''.join([w[0].upper() for w in event.title.split()][:2]) or event.title[:2].upper()
+    svg = f'''<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="{size/2}" cy="{size/2}" r="{size/2 - 5}" fill="{c['bg1']}" />
+        <circle cx="{size/2}" cy="{size/2}" r="{size/2 - 15}" stroke="{c['ring']}" stroke-width="3" fill="none" opacity="0.8"/>
+        <text x="{size/2}" y="{size/2 - 10}" text-anchor="middle" fill="{c['ring']}" font-size="{size/3}">{c['symbol']}</text>
+        <text x="{size/2}" y="{size/2 + 25}" text-anchor="middle" fill="#FFFFFF" font-size="{size/5}" font-weight="bold">{initials}</text>
+        <text x="{size/4}" y="{size/4}" fill="{c['ring']}" font-size="{size/8}">✦</text>
+        <text x="{size*0.75}" y="{size/4}" fill="{c['ring']}" font-size="{size/8}">✦</text>
+    </svg>'''
+    return svg
 
 # ---------- Decorators ----------
 def admin_login_required(f):
@@ -482,6 +503,7 @@ def utility_processor():
         get_event_total_contributions=get_event_total_contributions,
         get_event_total_fee=get_event_total_fee,
         get_page_lock_status=get_page_lock_status,
+        generate_event_logo=generate_event_logo,
         support_whatsapp=SUPPORT_WHATSAPP,
         support_email=SUPPORT_EMAIL,
         fee_percentage=SERVICE_FEE_PERCENTAGE,
@@ -761,7 +783,6 @@ def add_contributor(token):
         flash('All fields are required and amount must be > 0.', 'error')
         return redirect(url_for('manage_contributors', token=token))
 
-    # Deduplicate by phone for same event
     existing = Contributor.query.filter_by(event_id=event.id, phone=phone).first()
     if existing:
         flash('A contributor with this phone already exists for this event.', 'warning')
@@ -798,7 +819,6 @@ def contributor_view(token):
     show_payments = False
     if contrib.completed_at and (datetime.utcnow() - contrib.completed_at).days >= 7:
         show_payments = True
-    # Allow admin or the contributor themselves
     is_admin = session.get('admin_id') and (Admin.query.get(session['admin_id']).id == event.admin_id or Admin.query.get(session['admin_id']).is_super_admin)
     is_owner = session.get('contributor_id') == contrib.id
     if not (is_admin or is_owner):
@@ -881,7 +901,6 @@ def submit_payment_proof(token):
         try:
             ext = file.filename.rsplit('.', 1)[1].lower()
             filename = f"proof_{contrib.token}_{int(datetime.utcnow().timestamp())}.{ext}"
-            # Store outside web root (we'll serve via a protected route)
             upload_dir = os.path.join(os.path.dirname(__file__), 'uploads', 'proofs')
             os.makedirs(upload_dir, exist_ok=True)
             file_path = os.path.join(upload_dir, filename)
@@ -905,17 +924,14 @@ def contributor_receipt(token):
     if contrib.status != STATUS_APPROVED or not contrib.completed_at:
         flash('Only approved contributions have receipts.', 'error')
         return redirect(url_for('contributor_view', token=token))
-    # Check permission: admin or contributor themselves
     is_admin = session.get('admin_id') and (Admin.query.get(session['admin_id']).id == contrib.event.admin_id or Admin.query.get(session['admin_id']).is_super_admin)
     is_contributor = session.get('contributor_id') == contrib.id
     if not is_admin and not is_contributor:
         flash('Unauthorized.', 'error')
         return redirect(url_for('index'))
-    # If not admin, must wait 7 days
     if not is_admin and (datetime.utcnow() - contrib.completed_at).days < 7:
         flash('Receipt available after 7 days.', 'error')
         return redirect(url_for('contributor_view', token=token))
-    # Generate PDF
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     p.setFont("Helvetica-Bold", 16)
@@ -1229,7 +1245,7 @@ def reset_password(token):
         return redirect(url_for('login'))
     return render_template('reset_password.html', form=form)
 
-# ---------- Feature Requests (minimal implementation) ----------
+# ---------- Feature Requests (minimal) ----------
 @app.route('/manage-feature-requests')
 @admin_login_required
 @super_admin_required
@@ -1278,10 +1294,8 @@ scheduler.start()
 
 # ---------- Main ----------
 if __name__ == '__main__':
-    # Create tables if not exist
     with app.app_context():
         db.create_all()
-        # Ensure settings exist
         for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
             if not Setting.query.filter_by(key=key).first():
                 db.session.add(Setting(key=key, value=default))
