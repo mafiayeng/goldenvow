@@ -7,3 +7,4 @@ reportlab==4.2.0
 apscheduler==3.10.4
 psycopg2-binary==2.9.9
 Werkzeug==3.0.3
+email-validator==2.1.1   # <-- ADD THIS
