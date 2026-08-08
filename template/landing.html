@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Home{% endblock %}
+{% block title %}GoldenVow – Fundraising Made Beautiful{% endblock %}
 {% block content %}
 <div class="jumbotron-glass text-center">
     <h1 class="display-4"><i class="fas fa-handshake text-gold me-3"></i>GoldenVow</h1>
@@ -7,9 +7,9 @@
     <p class="mb-4">Bringing communities together through transparent fundraising.</p>
     <div class="d-flex flex-wrap justify-content-center gap-3">
         <a href="{{ url_for('login') }}" class="btn btn-gold"><i class="fas fa-user-cog me-2"></i>Admin Login</a>
-        <a href="{{ url_for('register') }}" class="btn btn-glass"><i class="fas fa-user-plus me-2"></i>Register</a>
+        <a href="{{ url_for('register') }}" class="btn btn-glass"><i class="fas fa-user-plus me-2"></i>Register as Admin</a>
         <a href="{{ url_for('contributor_login') }}" class="btn btn-glass"><i class="fas fa-user me-2"></i>Contributor Login</a>
-        <a href="{{ url_for('contact') }}" class="btn btn-glass"><i class="fas fa-envelope me-2"></i>Contact</a>
+        <a href="{{ url_for('contact') }}" class="btn btn-glass"><i class="fas fa-envelope me-2"></i>Contact Us</a>
     </div>
 </div>
 
@@ -18,22 +18,25 @@
         <div class="card-glow h-100 text-center">
             <i class="fas fa-calendar-alt text-gold fa-3x mb-3"></i>
             <h4>Create Events</h4>
-            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">Set up fundraising events in minutes.</p>
+            <p style="color: rgba(255,255,255,0.6);">Set up fundraising events in minutes.</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card-glow h-100 text-center">
             <i class="fas fa-users text-gold fa-3x mb-3"></i>
             <h4>Manage Contributors</h4>
-            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">Track pledges, uploads, and approvals.</p>
+            <p style="color: rgba(255,255,255,0.6);">Track pledges, uploads, and approvals.</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card-glow h-100 text-center">
             <i class="fas fa-coins text-gold fa-3x mb-3"></i>
             <h4>Earn Fees</h4>
-            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">2% platform fee on every contribution.</p>
+            <p style="color: rgba(255,255,255,0.6);">2% platform fee on every contribution.</p>
         </div>
     </div>
+</div>
+<div class="mt-5 text-center">
+    <p style="color: rgba(255,255,255,0.4);">Need help? <a href="{{ url_for('help_page') }}" class="text-gold">Visit Help</a> or <a href="{{ url_for('contact') }}" class="text-gold">Contact Support</a></p>
 </div>
 {% endblock %}
