@@ -6,4 +6,4 @@ bcrypt==4.1.2
 reportlab==4.2.0
 apscheduler==3.10.4
 psycopg2-binary==2.9.9
-Werkzeug==3.0.3   # explicitly pin for stability
+Werkzeug==3.0.3
