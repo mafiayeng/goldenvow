@@ -1,5 +1,5 @@
 # =============================================================================
-# GOLDENVOW – COMPLETE APPLICATION (UPDATED)
+# GOLDENVOW – FULL APPLICATION WITH GLASSMORPHISM
 # =============================================================================
 import os
 import uuid
@@ -28,6 +28,9 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
 
+# ---------- IMPORT FORMS ----------
+from forms import *   # <-- THIS FIXES NameError: LoginForm not defined
+
 # ---------- Logging ----------
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- App Setup ----------
 app = Flask(__name__)
-app.template_folder = 'template'   # <-- FIX: use your folder name
+app.template_folder = 'template'   # your folder name
 app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY environment variable is not set")
