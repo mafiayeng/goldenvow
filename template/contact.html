@@ -2,23 +2,32 @@
 {% block title %}Contact Us{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="glass-card p-4">
-            <h3 class="golden-text text-center">📩 Contact Us</h3>
-            <p class="text-muted-light text-center">Have a question? Reach out to us!</p>
-            <hr>
-            <div class="text-center mb-3">
-                <p><i class="bi bi-whatsapp golden-text"></i> <strong>WhatsApp:</strong> {{ support_whatsapp }}</p>
-                <p><i class="bi bi-envelope golden-text"></i> <strong>Email:</strong> {{ support_email }}</p>
-            </div>
-            <hr>
+    <div class="col-md-8">
+        <div class="glass p-4 p-md-5">
+            <h2 class="text-center mb-4"><i class="fas fa-envelope text-gold me-2"></i>Contact Us</h2>
             <form method="POST">
-                <div class="mb-2"><input type="text" name="name" placeholder="Your Name" class="form-control bg-dark text-light" required></div>
-                <div class="mb-2"><input type="email" name="email" placeholder="Email" class="form-control bg-dark text-light" required></div>
-                <div class="mb-2"><input type="tel" name="phone" placeholder="Phone (optional)" class="form-control bg-dark text-light"></div>
-                <div class="mb-2"><input type="text" name="subject" placeholder="Subject" class="form-control bg-dark text-light" required></div>
-                <div class="mb-2"><textarea name="message" placeholder="Message" class="form-control bg-dark text-light" rows="4" required></textarea></div>
-                <button type="submit" class="btn btn-gold w-100">Send Message</button>
+                {{ form.csrf_token }}
+                <div class="mb-3">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control", placeholder="Your name") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="your@email.com") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.phone.label(class="form-label") }}
+                    {{ form.phone(class="form-control", placeholder="Phone (optional)") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.subject.label(class="form-label") }}
+                    {{ form.subject(class="form-control", placeholder="Subject") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.message.label(class="form-label") }}
+                    {{ form.message(class="form-control", rows=5, placeholder="Your message...") }}
+                </div>
+                <button type="submit" class="btn btn-gold w-100"><i class="fas fa-paper-plane me-2"></i>Send</button>
             </form>
         </div>
     </div>
