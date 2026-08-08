@@ -1,40 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Super Dashboard{% endblock %}
+{% block title %}Super Admin Dashboard{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center">
-    <h2 class="golden-text">👑 Super Admin Dashboard</h2>
+<div class="row g-4">
+    <div class="col-md-3">
+        <div class="glass p-3 text-center">
+            <h3>{{ total_events }}</h3>
+            <p>Total Events</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass p-3 text-center">
+            <h3>KES {{ total_contributions|round(2) }}</h3>
+            <p>Total Contributions</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass p-3 text-center">
+            <h3>KES {{ total_fees|round(2) }}</h3>
+            <p>Total Fees Collected</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass p-3 text-center">
+            <h3>{{ pending_withdrawals }}</h3>
+            <p>Pending Withdrawals</p>
+        </div>
+    </div>
 </div>
-<div class="row mt-3">
-    <div class="col-3"><div class="glass-card text-center"><h3>{{ total_events }}</h3><small>Total Events</small></div></div>
-    <div class="col-3"><div class="glass-card text-center"><h3>KES {{ total_contributions|round(2)|int }}</h3><small>Total Raised</small></div></div>
-    <div class="col-3"><div class="glass-card text-center"><h3>KES {{ total_fees|round(2) }}</h3><small>Your Fees</small></div></div>
-    <div class="col-3"><div class="glass-card text-center"><h3>{{ pending_withdrawals }}</h3><small>Pending Withdrawals</small></div></div>
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="glass p-4">
+            <h4><i class="fas fa-hand-holding-usd text-gold me-2"></i>Withdrawals</h4>
+            <a href="{{ url_for('withdrawal_request') }}" class="btn btn-gold">Request Withdrawal</a>
+            <a href="{{ url_for('withdrawals') }}" class="btn btn-glass">View All</a>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="glass p-4">
+            <h4><i class="fas fa-users-cog text-gold me-2"></i>Admins</h4>
+            <a href="{{ url_for('manage_admins') }}" class="btn btn-glass">Manage Admins</a>
+            <a href="{{ url_for('settings') }}" class="btn btn-glass">Settings</a>
+        </div>
+    </div>
 </div>
-<div class="row mt-3">
-    <div class="col-3"><a href="/manage-admins" class="btn btn-gold w-100">Manage Admins</a></div>
-    <div class="col-3"><a href="/withdrawals" class="btn btn-gold w-100">Withdrawals</a></div>
-    <div class="col-3"><a href="/settings" class="btn btn-gold w-100">Settings</a></div>
-    <div class="col-3"><a href="/manage-feature-requests" class="btn btn-gold w-100">Feature Requests</a></div>
+<hr class="my-4">
+<h4>All Admins</h4>
+<div class="table-responsive">
+    <table class="table text-light">
+        <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th>Super Admin</th><th>Active</th></tr></thead>
+        <tbody>
+            {% for a in admins %}
+            <tr>
+                <td>{{ a.username }}</td>
+                <td>{{ a.email }}</td>
+                <td>{{ a.phone }}</td>
+                <td>{{ 'Yes' if a.is_super_admin else 'No' }}</td>
+                <td>{{ '✅' if a.is_active else '❌' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
-<h4 class="mt-4 golden-text">All Admins</h4>
-<table class="table table-dark">
-    <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
-    <tbody>
-    {% for a in admins %}
-    <tr>
-        <td>{{ a.username }}</td>
-        <td>{{ a.email }}</td>
-        <td>{% if a.is_super_admin %}Super{% else %}Admin{% endif %}</td>
-        <td>{% if a.is_active %}Active{% else %}Disabled{% endif %}</td>
-        <td>
-            {% if not a.is_super_admin %}
-            <form style="display:inline" method="POST" action="/admin/{{ a.id }}/toggle">
-                <button class="btn btn-sm btn-warning">{{ 'Disable' if a.is_active else 'Enable' }}</button>
-            </form>
-            {% endif %}
-        </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
 {% endblock %}
