@@ -1,5 +1,5 @@
 # =============================================================================
-# GOLDENVOW – FULL APPLICATION WITH GLASSMORPHISM
+# GOLDENVOW – COMPLETE APPLICATION (FULL)
 # =============================================================================
 import os
 import uuid
@@ -29,7 +29,7 @@ from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # ---------- IMPORT FORMS ----------
-from forms import *   # <-- THIS FIXES NameError: LoginForm not defined
+from forms import *
 
 # ---------- Logging ----------
 logging.basicConfig(
@@ -542,6 +542,12 @@ def login():
             admin.last_login = datetime.utcnow()
             db.session.commit()
             flash('Logged in successfully.', 'success')
+            # If admin has no events, redirect to create event
+            if not admin.is_super_admin:
+                events_count = Event.query.filter_by(admin_id=admin.id).count()
+                if events_count == 0:
+                    flash('Welcome! Let\'s create your first event.', 'info')
+                    return redirect(url_for('create_event'))
             if admin.is_super_admin:
                 return redirect(url_for('super_dashboard'))
             return redirect(url_for('dashboard'))
@@ -595,8 +601,15 @@ def register():
             else:
                 flash('Invalid referral code.', 'warning')
 
-        flash('Registration successful! Please login.', 'success')
-        return redirect(url_for('login'))
+        # Auto-login and redirect to create event
+        session['admin_id'] = admin.id
+        session.permanent = True
+        admin.last_login = datetime.utcnow()
+        db.session.commit()
+
+        flash('🎉 Welcome! Let\'s create your first event.', 'success')
+        return redirect(url_for('create_event'))
+
     return render_template('register.html', form=form)
 
 @app.route('/logout')
@@ -640,6 +653,7 @@ def create_event():
         flash('Super admins cannot create events.', 'error')
         return redirect(url_for('dashboard'))
     form = EventForm()
+    events_count = Event.query.filter_by(admin_id=admin.id).count()  # for welcome banner
     if form.validate_on_submit():
         token = generate_unique_token()
         while Event.query.filter_by(token=token).first():
@@ -675,7 +689,7 @@ def create_event():
         except Exception as e:
             logger.error(f"Event creation error: {e}")
             flash('An error occurred while creating the event.', 'error')
-    return render_template('create_event.html', form=form)
+    return render_template('create_event.html', form=form, events_count=events_count)
 
 @app.route('/events/<token>')
 def event_landing(token):
@@ -1117,10 +1131,13 @@ def withdrawals():
     wd_list = Withdrawal.query.order_by(desc(Withdrawal.created_at)).all()
     return render_template('withdrawals.html', withdrawals=wd_list)
 
-@app.route('/withdrawal/request', methods=['POST'])
+@app.route('/withdrawal/request', methods=['GET', 'POST'])
 @admin_login_required
 @super_admin_required
-def request_withdrawal():
+def withdrawal_request():
+    if request.method == 'GET':
+        return render_template('request_withdrawal.html')
+    # POST
     try:
         amount = float(request.form.get('amount', 0))
         phone = request.form.get('phone', '').strip()
