@@ -1,5 +1,5 @@
 # =============================================================================
-# GOLDENVOW – COMPLETE APPLICATION (FULL, UPDATED)
+# GOLDENVOW – COMPLETE APPLICATION (UPDATED)
 # =============================================================================
 import os
 import uuid
@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- App Setup ----------
 app = Flask(__name__)
+app.template_folder = 'template'   # <-- FIX: use your folder name
 app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY environment variable is not set")
@@ -762,7 +763,7 @@ def manage_contributors(token):
         return redirect(url_for('dashboard'))
     page = request.args.get('page', 1, type=int)
     contributors = Contributor.query.filter_by(event_id=event.id).order_by(desc(Contributor.created_at)).paginate(page=page, per_page=15)
-    return render_template('contributors_list.html', event=event, contributors=contributors)
+    return render_template('contributors.html', event=event, contributors=contributors)
 
 @app.route('/events/<token>/contributor/add', methods=['POST'])
 @admin_login_required
@@ -824,7 +825,7 @@ def contributor_view(token):
     if not (is_admin or is_owner):
         flash('You are not authorized to view this page.', 'error')
         return redirect(url_for('index'))
-    return render_template('contributor_view_page.html', contrib=contrib, event=event,
+    return render_template('contributor_view.html', contrib=contrib, event=event,
                             payments=payments, show_payments=show_payments)
 
 @app.route('/contributor/<token>/approve', methods=['POST'])
@@ -981,7 +982,7 @@ def contributor_register():
         phone = form.phone.data.strip()
         if Contributor.query.filter_by(username=username).first():
             flash('Username already taken.', 'error')
-            return render_template('contributor_register.html', form=form, event_token=event_token)
+            return render_template('contributor_registration.html', form=form, event_token=event_token)
         token = generate_unique_token()
         while Contributor.query.filter_by(token=token).first():
             token = generate_unique_token()
@@ -1000,7 +1001,7 @@ def contributor_register():
         if event_token:
             return redirect(url_for('event_landing', token=event_token))
         return redirect(url_for('contributor_dashboard'))
-    return render_template('contributor_register.html', form=form, event_token=event_token)
+    return render_template('contributor_registration.html', form=form, event_token=event_token)
 
 @app.route('/contributor/logout')
 def contributor_logout():
@@ -1245,7 +1246,7 @@ def reset_password(token):
         return redirect(url_for('login'))
     return render_template('reset_password.html', form=form)
 
-# ---------- Feature Requests (minimal) ----------
+# ---------- Feature Requests ----------
 @app.route('/manage-feature-requests')
 @admin_login_required
 @super_admin_required
@@ -1258,7 +1259,7 @@ def submit_feature_request(event_token=None):
     flash('Feature request feature is coming soon.', 'info')
     return redirect(url_for('index'))
 
-# ---------- Create Super Admin (only if none exists) ----------
+# ---------- Create Super Admin ----------
 @app.route('/create_super_admin')
 def create_super_admin():
     if Admin.query.count() > 0:
