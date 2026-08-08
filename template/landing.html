@@ -1,55 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Welcome to GoldenVow{% endblock %}
+{% block title %}Home{% endblock %}
 {% block content %}
-<div class="intro-overlay" id="introOverlay">
-    <div class="glass-card p-5" style="max-width:600px;">
-        <svg width="80" height="80" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="20" cy="20" r="18" stroke="#D4AF37" stroke-width="2"/>
-            <text x="20" y="27" text-anchor="middle" fill="#D4AF37" font-size="22" font-weight="bold" font-family="Georgia">GV</text>
-            <circle cx="8" cy="8" r="2" fill="#D4AF37"/>
-            <circle cx="32" cy="8" r="2" fill="#D4AF37"/>
-        </svg>
-        <h1 class="golden-text display-4">GoldenVow</h1>
-        <p class="lead text-light">Transforming communities through transparent fundraising.</p>
-        <p class="text-muted-light">Your journey to meaningful contributions starts here.</p>
-        <button class="btn btn-gold btn-lg" onclick="document.getElementById('introOverlay').style.display='none';">Enter GoldenVow</button>
+<div class="jumbotron-glass text-center">
+    <h1 class="display-4"><i class="fas fa-handshake text-gold me-3"></i>GoldenVow</h1>
+    <p class="lead">Your journey to meaningful contributions starts here.</p>
+    <p class="mb-4">Bringing communities together through transparent fundraising.</p>
+    <div class="d-flex flex-wrap justify-content-center gap-3">
+        <a href="{{ url_for('login') }}" class="btn btn-gold"><i class="fas fa-user-cog me-2"></i>Admin Login</a>
+        <a href="{{ url_for('register') }}" class="btn btn-glass"><i class="fas fa-user-plus me-2"></i>Register</a>
+        <a href="{{ url_for('contributor_login') }}" class="btn btn-glass"><i class="fas fa-user me-2"></i>Contributor Login</a>
+        <a href="{{ url_for('contact') }}" class="btn btn-glass"><i class="fas fa-envelope me-2"></i>Contact</a>
     </div>
 </div>
-<section class="hero">
-    <div class="glass-card p-5" style="max-width:800px; margin:0 auto;">
-        <div class="text-center mb-4">
-            <svg width="80" height="80" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="20" cy="20" r="18" stroke="#D4AF37" stroke-width="2"/>
-                <text x="20" y="27" text-anchor="middle" fill="#D4AF37" font-size="22" font-weight="bold" font-family="Georgia">GV</text>
-                <circle cx="8" cy="8" r="2" fill="#D4AF37"/>
-                <circle cx="32" cy="8" r="2" fill="#D4AF37"/>
-            </svg>
-        </div>
-        <h1 class="golden-text">✦ GoldenVow</h1>
-        <p class="lead">Bringing communities together through <span class="golden-text">transparent fundraising</span>.</p>
-        <p class="text-muted-light">Start a campaign, manage contributions, and earn fees – all in one platform.</p>
-        <div class="btn-group mt-4 flex-wrap justify-content-center gap-2">
-            <a href="{{ url_for('login') }}" class="btn btn-gold">Admin Login</a>
-            <a href="{{ url_for('register') }}" class="btn btn-outline-gold">Register as Admin</a>
-            <a href="{{ url_for('contributor_login') }}" class="btn btn-outline-gold">Contributor Login</a>
-            <a href="{{ url_for('contact') }}" class="btn btn-outline-gold">Contact Us</a>
-        </div>
-        <hr class="border-gold opacity-25">
-        <div class="row mt-4">
-            <div class="col-md-4"><i class="bi bi-calendar-event fs-1 golden-text"></i><h5>Create Events</h5><p class="small text-muted-light">Set up fundraising events in minutes.</p></div>
-            <div class="col-md-4"><i class="bi bi-people fs-1 golden-text"></i><h5>Manage Contributors</h5><p class="small text-muted-light">Track pledges, uploads, and approvals.</p></div>
-            <div class="col-md-4"><i class="bi bi-graph-up fs-1 golden-text"></i><h5>Earn Fees</h5><p class="small text-muted-light">2% platform fee on every contribution.</p></div>
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card-glow h-100 text-center">
+            <i class="fas fa-calendar-alt text-gold fa-3x mb-3"></i>
+            <h4>Create Events</h4>
+            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">Set up fundraising events in minutes.</p>
         </div>
     </div>
-</section>
-<script>
-    window.addEventListener('load', function() {
-        const msg = "Welcome to GoldenVow, transforming communities through transparent fundraising.";
-        const utterance = new SpeechSynthesisUtterance(msg);
-        utterance.rate = 0.9;
-        utterance.pitch = 0.9;
-        utterance.voice = speechSynthesis.getVoices().find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('male')) || null;
-        speechSynthesis.speak(utterance);
-    });
-</script>
+    <div class="col-md-4">
+        <div class="card-glow h-100 text-center">
+            <i class="fas fa-users text-gold fa-3x mb-3"></i>
+            <h4>Manage Contributors</h4>
+            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">Track pledges, uploads, and approvals.</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-glow h-100 text-center">
+            <i class="fas fa-coins text-gold fa-3x mb-3"></i>
+            <h4>Earn Fees</h4>
+            <p class="text-muted" style="color: rgba(255,255,255,0.6) !important;">2% platform fee on every contribution.</p>
+        </div>
+    </div>
+</div>
 {% endblock %}
