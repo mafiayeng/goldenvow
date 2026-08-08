@@ -1,45 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h2 class="golden-text">⚙️ Super Admin Settings</h2>
-
-<div class="glass-card p-4">
-    <form method="POST">
-        <!-- Maintenance Toggle -->
-        <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" name="maintenance_mode" id="maintenance" {% if maintenance_mode %}checked{% endif %}>
-            <label class="form-check-label" for="maintenance">🔒 Enable Maintenance Mode (Entire system offline)</label>
-        </div>
-
-        <!-- Custom Message -->
-        <div class="mb-3">
-            <label class="form-label">📝 Apology / Maintenance Message</label>
-            <textarea name="maintenance_message" class="form-control bg-dark text-light" rows="3" placeholder="e.g. We are performing a major upgrade...">{{ maintenance_message }}</textarea>
-        </div>
-
-        <!-- Estimated Return Time -->
-        <div class="mb-3">
-            <label class="form-label">⏰ Estimated Return Time</label>
-            <input type="text" name="maintenance_eta" class="form-control bg-dark text-light" placeholder="e.g. 2 hours, Tomorrow 10:00 AM" value="{{ maintenance_eta }}">
-        </div>
-
-        <button type="submit" class="btn btn-gold">💾 Save Settings</button>
-    </form>
-</div>
-
-<hr>
-<div class="row">
+<div class="row justify-content-center">
     <div class="col-md-6">
-        <p class="text-muted-light"><strong>Service Fee:</strong> {{ fee_percentage }}% of every contribution</p>
-        <p class="text-muted-light"><strong>Total Admins:</strong> {{ Admin.query.count() }}</p>
+        <div class="glass p-4 p-md-5">
+            <h2 class="text-center mb-4"><i class="fas fa-cog text-gold me-2"></i>Settings</h2>
+            <form method="POST">
+                {{ form.csrf_token }}
+                <div class="mb-3 form-check">
+                    {{ form.maintenance_mode(class="form-check-input") }}
+                    {{ form.maintenance_mode.label(class="form-check-label") }}
+                </div>
+                <button type="submit" class="btn btn-gold w-100">Save Settings</button>
+            </form>
+        </div>
     </div>
-    <div class="col-md-6">
-        <p class="text-muted-light"><strong>Your Referral Code:</strong> <span class="golden-text">{{ get_admin().referral_code }}</span></p>
-        <p class="text-muted-light"><strong>Referrals:</strong> {{ get_admin().referral_count }}</p>
-    </div>
-</div>
-
-<div class="mt-3 text-center">
-    <a href="{{ url_for('super_dashboard') }}" class="text-muted-light">← Back to Super Dashboard</a>
 </div>
 {% endblock %}
