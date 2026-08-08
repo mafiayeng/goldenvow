@@ -4,63 +4,142 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoldenVow – {% block title %}Fundraising{% endblock %}</title>
-    <!-- Bootstrap 5 (CDN) -->
+    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome for icons -->
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <!-- Google Fonts (Poppins) -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Poppins', sans-serif;
-            background: #f8f9fa;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            background-attachment: fixed;
+            color: #fff;
         }
+        /* Glassmorphism base */
+        .glass {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        /* Navbar */
         .navbar {
-            background: linear-gradient(135deg, #1A2A3A 0%, #2C3E50 100%);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.05) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
         .navbar-brand {
             font-weight: 700;
             color: #D4AF37 !important;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
+        }
+        .navbar-brand i {
+            color: #D4AF37;
         }
         .navbar-nav .nav-link {
-            color: #fff !important;
+            color: rgba(255,255,255,0.8) !important;
             font-weight: 400;
             transition: 0.3s;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
         }
         .navbar-nav .nav-link:hover {
+            background: rgba(212, 175, 55, 0.15);
             color: #D4AF37 !important;
         }
         .btn-gold {
-            background: #D4AF37;
-            color: #1A2A3A;
+            background: linear-gradient(135deg, #D4AF37, #f5d97e);
+            color: #1A1A2E;
             font-weight: 600;
             border: none;
+            border-radius: 30px;
+            padding: 0.6rem 1.8rem;
+            transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
         }
         .btn-gold:hover {
-            background: #c5a028;
-            color: #1A2A3A;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.4);
+            color: #1A1A2E;
         }
-        .card {
-            border-radius: 16px;
-            border: none;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+        .btn-glass {
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            border-radius: 30px;
+            padding: 0.6rem 1.8rem;
             transition: 0.3s;
         }
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 32px rgba(0,0,0,0.1);
+        .btn-glass:hover {
+            background: rgba(255,255,255,0.15);
+            color: #D4AF37;
+        }
+        .card-glow {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            transition: 0.4s;
+            color: #fff;
+            padding: 1.5rem;
+        }
+        .card-glow:hover {
+            transform: translateY(-8px);
+            border-color: #D4AF37;
+            box-shadow: 0 20px 60px rgba(212, 175, 55, 0.15);
         }
         .footer {
-            background: #1A2A3A;
-            color: #fff;
-            padding: 2rem 0;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            color: rgba(255,255,255,0.7);
+            padding: 1.5rem 0;
             margin-top: 3rem;
         }
         .footer a {
             color: #D4AF37;
             text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .alert-glass {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            color: #fff;
+        }
+        .alert-glass a {
+            color: #D4AF37;
+        }
+        /* Form inputs */
+        .form-control, .form-select {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            border-radius: 16px;
+            padding: 0.75rem 1.2rem;
+            backdrop-filter: blur(4px);
+        }
+        .form-control:focus, .form-select:focus {
+            background: rgba(255,255,255,0.08);
+            border-color: #D4AF37;
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+            color: #fff;
+        }
+        .form-label {
+            color: rgba(255,255,255,0.8);
+            font-weight: 500;
         }
         .generated-logo svg {
             max-width: 150px;
@@ -70,26 +149,33 @@
             max-width: 100%;
             max-height: 300px;
             object-fit: cover;
-            border-radius: 12px;
-        }
-        .alert a {
-            color: #0c5460;
-            text-decoration: underline;
-        }
-        .jumbotron {
-            background: linear-gradient(135deg, #1A2A3A 0%, #2C3E50 100%);
-            color: #fff;
-            padding: 4rem 2rem;
             border-radius: 20px;
+        }
+        h1, h2, h3, h4 {
+            color: #fff;
+        }
+        .text-gold {
+            color: #D4AF37;
+        }
+        .jumbotron-glass {
+            background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 40px;
+            padding: 4rem 2rem;
             margin-bottom: 2rem;
         }
-        .jumbotron h1 {
+        .jumbotron-glass h1 {
             font-weight: 700;
             color: #D4AF37;
         }
-        .jumbotron .lead {
-            color: #e0e0e0;
+        .jumbotron-glass .lead {
+            color: rgba(255,255,255,0.8);
         }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        ::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -111,8 +197,8 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_dashboard') }}"><i class="fas fa-user me-1"></i>My Contributions</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_logout') }}"><i class="fas fa-sign-out-alt me-1"></i>Logout</a></li>
                     {% else %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}"><i class="fas fa-user-cog me-1"></i>Admin Login</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_login') }}"><i class="fas fa-user me-1"></i>Contributor Login</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}"><i class="fas fa-user-cog me-1"></i>Admin</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('contributor_login') }}"><i class="fas fa-user me-1"></i>Contributor</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('help_page') }}"><i class="fas fa-question-circle me-1"></i>Help</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('contact') }}"><i class="fas fa-envelope me-1"></i>Contact</a></li>
@@ -126,12 +212,12 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, msg in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    <div class="alert alert-glass alert-dismissible fade show" role="alert">
                         {{ msg }}
                         {% if category in ['error', 'warning', 'info'] %}
                             <br><a href="javascript:history.back()" class="alert-link">← Go Back</a>
                         {% endif %}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
             {% endif %}
