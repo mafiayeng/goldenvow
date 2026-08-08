@@ -2,20 +2,38 @@
 {% block title %}Admin Register{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
-        <div class="glass-card p-4">
-            <h3 class="text-center golden-text">✦ Create Admin Account</h3>
-            <hr>
+    <div class="col-md-6">
+        <div class="glass p-4 p-md-5">
+            <h2 class="text-center mb-4"><i class="fas fa-user-plus text-gold me-2"></i>Admin Registration</h2>
             <form method="POST">
-                <div class="mb-2"><label>Username <span class="text-danger">*</span></label><input type="text" name="username" class="form-control" placeholder="Username" required></div>
-                <div class="mb-2"><label>Email <span class="text-danger">*</span></label><input type="email" name="email" class="form-control" placeholder="Email" required></div>
-                <div class="mb-2"><label>Phone</label><input type="tel" name="phone" class="form-control" placeholder="Phone"></div>
-                <div class="mb-2"><label>Password <span class="text-danger">*</span></label><input type="password" name="password" class="form-control" placeholder="Password" required></div>
-                <div class="mb-2"><label>Referral Code (optional)</label><input type="text" name="referral_code" class="form-control" placeholder="Referral Code"></div>
-                <div class="mb-3"><label>Super Admin Secret (if applicable)</label><input type="password" name="super_secret" class="form-control" placeholder="Super Admin Secret"></div>
-                <button type="submit" class="btn btn-gold w-100">Register</button>
+                {{ form.csrf_token }}
+                <div class="mb-3">
+                    {{ form.username.label(class="form-label") }}
+                    {{ form.username(class="form-control", placeholder="Choose a username") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.password.label(class="form-label") }}
+                    {{ form.password(class="form-control", placeholder="Min 6 characters") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="your@email.com") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.phone.label(class="form-label") }}
+                    {{ form.phone(class="form-control", placeholder="Phone number") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.super_secret.label(class="form-label") }}
+                    {{ form.super_secret(class="form-control", placeholder="(optional)") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.referral_code.label(class="form-label") }}
+                    {{ form.referral_code(class="form-control", placeholder="(optional)") }}
+                </div>
+                <button type="submit" class="btn btn-gold w-100"><i class="fas fa-user-check me-2"></i>Register</button>
             </form>
-            <div class="mt-3 text-center"><small>Already have an account? <a href="{{ url_for('login') }}">Login</a></small></div>
+            <p class="mt-3 text-center">Already have an account? <a href="{{ url_for('login') }}" class="text-gold">Login</a></p>
         </div>
     </div>
 </div>
