@@ -49,9 +49,8 @@ app.permanent_session_lifetime = timedelta(days=7)
 csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
-# ----- Constants (UPDATED with Kenya country code) -----
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
-SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')   # <-- changed
+SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
@@ -265,6 +264,16 @@ class Setting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=False)
+
+# ---------- NEW: Announcement Model ----------
+class Announcement(db.Model):
+    __tablename__ = 'announcement'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=True)
 
 # ---------- Helper Functions ----------
 def send_email(to, subject, body):
@@ -497,6 +506,10 @@ def handle_csrf_error(e):
 # ---------- Routes ----------
 @app.route('/')
 def index():
+    # Get active announcements for all users
+    announcements = Announcement.query.filter_by(is_active=True).filter(
+        (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
+    ).order_by(desc(Announcement.created_at)).all()
     if session.get('admin_id'):
         admin = Admin.query.get(session['admin_id'])
         if admin and admin.is_super_admin:
@@ -505,7 +518,7 @@ def index():
             return redirect(url_for('dashboard'))
     if session.get('contributor_id'):
         return redirect(url_for('contributor_dashboard'))
-    return render_template('landing.html')
+    return render_template('landing.html', announcements=announcements)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -614,8 +627,12 @@ def dashboard():
     events = Event.query.filter_by(admin_id=admin.id).order_by(desc(Event.created_at)).paginate(page=page, per_page=10)
     total_raised = sum(get_event_total_contributions(e.id) for e in events.items)
     pending_count = Contributor.query.filter_by(status=STATUS_PENDING).join(Event).filter(Event.admin_id == admin.id).count()
+    announcements = Announcement.query.filter_by(is_active=True).filter(
+        (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
+    ).order_by(desc(Announcement.created_at)).all()
     return render_template('dashboard.html', admin=admin, events=events,
-                            total_raised=total_raised, pending_contributions=pending_count)
+                            total_raised=total_raised, pending_contributions=pending_count,
+                            announcements=announcements)
 
 @app.route('/super-dashboard')
 @admin_login_required
@@ -627,9 +644,13 @@ def super_dashboard():
     total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
     pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
     admins = Admin.query.all()
+    announcements = Announcement.query.filter_by(is_active=True).filter(
+        (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
+    ).order_by(desc(Announcement.created_at)).all()
     return render_template('super_dashboard.html', admin=admin, total_events=total_events,
                             total_contributions=total_contributions, total_fees=total_fees,
-                            pending_withdrawals=pending_withdrawals, admins=admins)
+                            pending_withdrawals=pending_withdrawals, admins=admins,
+                            announcements=announcements)
 
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
@@ -778,48 +799,10 @@ def manage_contributors(token):
 @app.route('/events/<token>/contributor/add', methods=['POST'])
 @admin_login_required
 def add_contributor(token):
-    event = Event.query.filter_by(token=token).first_or_404()
-    admin = Admin.query.get(session['admin_id'])
-    if event.admin_id != admin.id and not admin.is_super_admin:
-        flash('Unauthorized.', 'error')
-        return redirect(url_for('dashboard'))
-
-    name = request.form.get('name', '').strip()
-    phone = request.form.get('phone', '').strip()
-    try:
-        pledge = float(request.form.get('pledge_amount', 0))
-    except ValueError:
-        pledge = 0
-    if not name or not phone or pledge <= 0:
-        flash('All fields are required and amount must be > 0.', 'error')
-        return redirect(url_for('manage_contributors', token=token))
-
-    existing = Contributor.query.filter_by(event_id=event.id, phone=phone).first()
-    if existing:
-        flash('A contributor with this phone already exists for this event.', 'warning')
-        return redirect(url_for('manage_contributors', token=token))
-
-    ct = generate_unique_token()
-    while Contributor.query.filter_by(token=ct).first():
-        ct = generate_unique_token()
-    contrib = Contributor(
-        event_id=event.id,
-        token=ct,
-        pin=generate_pin(),
-        name=name,
-        phone=phone,
-        pledge_amount=pledge,
-        status=STATUS_PENDING
-    )
-    db.session.add(contrib)
-    db.session.commit()
-    if not event.first_contribution_date:
-        event.first_contribution_date = datetime.utcnow()
-    event.last_activity = datetime.utcnow()
-    event.dormant_notified = False
-    db.session.commit()
-    flash('Contributor added successfully.', 'success')
-    return redirect(url_for('manage_contributors', token=event.token))
+    # This route is kept for backward compatibility but not used anymore.
+    # We can leave it as is – no form calls it.
+    flash('Contributors must register themselves via the event link.', 'info')
+    return redirect(url_for('manage_contributors', token=token))
 
 @app.route('/contributor/<token>')
 def contributor_view(token):
@@ -1039,7 +1022,10 @@ def contributor_logout():
 def contributor_dashboard():
     contrib = Contributor.query.get(session['contributor_id'])
     contributions = Contributor.query.filter_by(name=contrib.name, phone=contrib.phone).all()
-    return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions)
+    announcements = Announcement.query.filter_by(is_active=True).filter(
+        (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
+    ).order_by(desc(Announcement.created_at)).all()
+    return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions, announcements=announcements)
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
@@ -1054,7 +1040,11 @@ def contact():
         )
         db.session.add(msg)
         db.session.commit()
-        send_email(SUPPORT_EMAIL, f"[GoldenVow] {form.subject.data}", f"From: {form.name.data} <{form.email.data}>\nPhone: {form.phone.data}\n\n{form.message.data}")
+        # Notify all super admins
+        super_admins = Admin.query.filter_by(is_super_admin=True).all()
+        for sa in super_admins:
+            create_notification(sa.id, f"New contact message from {msg.name}: {msg.subject}", 'contact')
+        send_email(SUPPORT_EMAIL, f"[GoldenVow] {msg.subject}", f"From: {msg.name} <{msg.email}>\nPhone: {msg.phone}\n\n{msg.message}")
         flash('Your message has been sent.', 'success')
         return redirect(url_for('contact'))
     return render_template('contact.html', form=form)
@@ -1266,7 +1256,9 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
+# ---------- AI Chat API (with CSRF exempt) ----------
 @app.route('/api/chat', methods=['POST'])
+@csrf.exempt
 @admin_login_required
 def chat():
     try:
@@ -1459,5 +1451,14 @@ if __name__ == '__main__':
         ]:
             if not Setting.query.filter_by(key=key).first():
                 db.session.add(Setting(key=key, value=default))
+        # Create an initial announcement if none exists
+        if Announcement.query.count() == 0:
+            ann = Announcement(
+                title="Welcome to GoldenVow!",
+                content="Start by creating your first event and inviting contributors.",
+                is_active=True,
+                expires_at=datetime.utcnow() + timedelta(days=30)
+            )
+            db.session.add(ann)
         db.session.commit()
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
