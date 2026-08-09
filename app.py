@@ -1,6 +1,3 @@
-# =============================================================================
-# GOLDENVOW – FINAL COMPLETE APPLICATION (with Light/Dark Toggle)
-# =============================================================================
 import os
 import uuid
 import random
@@ -29,10 +26,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# ---------- IMPORT FORMS ----------
 from forms import *
 
-# ---------- Logging ----------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,7 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------- App Setup ----------
 app = Flask(__name__)
 app.template_folder = 'template'
 app.secret_key = os.environ.get('SECRET_KEY')
@@ -55,7 +49,6 @@ app.permanent_session_lifetime = timedelta(days=7)
 csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
-# ---------- Constants ----------
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
 SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '0737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
@@ -92,11 +85,7 @@ class Admin(db.Model):
     referral_count = db.Column(db.Integer, default=0)
     bonus_earned = db.Column(db.Float, default=0.0)
     last_login = db.Column(db.DateTime, nullable=True)
-
-    __table_args__ = (
-        Index('idx_admin_username', 'username'),
-        Index('idx_admin_email', 'email'),
-    )
+    __table_args__ = (Index('idx_admin_username', 'username'), Index('idx_admin_email', 'email'),)
 
 class Event(db.Model):
     __tablename__ = 'event'
@@ -135,7 +124,6 @@ class Event(db.Model):
     last_activity = db.Column(db.DateTime, default=datetime.utcnow)
     dormant_notified = db.Column(db.Boolean, default=False)
     dormant_notified_at = db.Column(db.DateTime, nullable=True)
-
     __table_args__ = (
         Index('idx_event_admin_id', 'admin_id'),
         Index('idx_event_token', 'token'),
@@ -168,7 +156,6 @@ class Contributor(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     __table_args__ = (
         Index('idx_contributor_event_id', 'event_id'),
         Index('idx_contributor_status', 'status'),
@@ -1281,68 +1268,73 @@ def ai_helper():
 @app.route('/api/chat', methods=['POST'])
 @admin_login_required
 def chat():
-    data = request.get_json()
-    user_message = data.get('message', '').strip().lower()
-    if not user_message:
-        return jsonify({'error': 'Message is required'}), 400
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '').strip().lower()
+        if not user_message:
+            return jsonify({'error': 'Message is required'}), 400
 
-    admin = Admin.query.get(session['admin_id'])
-    admin_name = admin.username if admin else "Unknown"
-    admin_email = admin.email if admin else "no-email@example.com"
+        admin = Admin.query.get(session['admin_id'])
+        admin_name = admin.username if admin else "Unknown"
+        admin_email = admin.email if admin else "no-email@example.com"
 
-    total_events = Event.query.count()
-    total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
-    pending_contributions = Contributor.query.filter_by(status=STATUS_PENDING).count()
-    total_fees = get_global_total_fees()
-    active_admins = Admin.query.filter_by(is_active=True).count()
-    super_admins = Admin.query.filter_by(is_super_admin=True).count()
-    recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
-    recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
+        total_events = Event.query.count()
+        total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
+        pending_contributions = Contributor.query.filter_by(status=STATUS_PENDING).count()
+        total_fees = get_global_total_fees()
+        active_admins = Admin.query.filter_by(is_active=True).count()
+        super_admins = Admin.query.filter_by(is_super_admin=True).count()
+        recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
+        recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
 
-    def escalate_to_support(question):
-        subject = f"AI Assistant Support Request from {admin_name}"
-        body = f"""
+        def escalate_to_support(question):
+            subject = f"AI Assistant Support Request from {admin_name}"
+            body = f"""
 Admin: {admin_name}
 Email: {admin_email}
 Question:
 {question}
-        """
-        send_email(SUPPORT_EMAIL, subject, body)
-        return "📧 Your question has been forwarded to our support team. They will get back to you shortly."
+            """
+            send_email(SUPPORT_EMAIL, subject, body)
+            return "📧 Your question has been forwarded to our support team. They will get back to you shortly."
 
-    def respond(msg):
-        if any(word in msg for word in ['human', 'agent', 'support', 'talk to', 'contact support']):
-            return escalate_to_support(user_message)
-        if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
-            return f"📊 You currently have **{total_events}** events."
-        if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
-            return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
-        if 'pending' in msg or 'approval' in msg:
-            return f"⏳ There are **{pending_contributions}** pending contribution approvals."
-        if 'fee' in msg or 'fees' in msg:
-            return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
-        if 'admin' in msg:
-            if 'active' in msg:
-                return f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."
-            return f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."
-        if 'recent' in msg or 'latest' in msg:
-            if recent_events_text:
-                return f"📅 Recent events:\n{recent_events_text}"
-            return "No recent events found."
-        if 'help' in msg or 'guide' in msg or 'how' in msg:
-            return """📖 **Quick Guide**
+        def respond(msg):
+            if any(word in msg for word in ['human', 'agent', 'support', 'talk to', 'contact support']):
+                return escalate_to_support(user_message)
+            if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
+                return f"📊 You currently have **{total_events}** events."
+            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
+                return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
+            if 'pending' in msg or 'approval' in msg:
+                return f"⏳ There are **{pending_contributions}** pending contribution approvals."
+            if 'fee' in msg or 'fees' in msg:
+                return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
+            if 'admin' in msg:
+                if 'active' in msg:
+                    return f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."
+                return f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."
+            if 'recent' in msg or 'latest' in msg:
+                if recent_events_text:
+                    return f"📅 Recent events:\n{recent_events_text}"
+                return "No recent events found."
+            if 'help' in msg or 'guide' in msg or 'how' in msg:
+                return """📖 **Quick Guide**
 1. **Create an event** – click “Create Event” and fill the details.
 2. **Add contributors** – under the event, click “Manage” → “Add Contributor”.
 3. **Approve contributions** – when a contributor submits proof, review and click “Approve”.
 4. **Withdraw fees** – as super admin, go to Withdrawals → Request.
 5. **Lock page** – if you want to disable contributions, use the “Lock Page” button.
 For more, visit the Help page."""
-        if 'hello' in msg or 'hi' in msg or 'hey' in msg:
-            return "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."
-        return escalate_to_support(user_message)
+            if 'hello' in msg or 'hi' in msg or 'hey' in msg:
+                return "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."
+            return escalate_to_support(user_message)
 
-    response = respond(user_message)
-    return jsonify({'response': response})
+        response = respond(user_message)
+        return jsonify({'response': response})
+
+    except Exception as e:
+        logger.error(f"AI Chat error: {e}")
+        return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
 
 # ---------- Password Reset ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
