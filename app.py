@@ -21,6 +21,7 @@ from flask_wtf import FlaskForm, CSRFProtect
 from flask_wtf.csrf import CSRFError
 from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextAreaField, BooleanField, SelectField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, ValidationError, Optional
+from flask_wtf.file import FileField, FileAllowed
 import bcrypt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -124,7 +125,7 @@ class Event(db.Model):
     last_activity = db.Column(db.DateTime, default=datetime.utcnow)
     dormant_notified = db.Column(db.Boolean, default=False)
     dormant_notified_at = db.Column(db.DateTime, nullable=True)
-    lock_message = db.Column(db.Text, nullable=True)   # NEW: custom lock message
+    lock_message = db.Column(db.Text, nullable=True)
     __table_args__ = (
         Index('idx_event_admin_id', 'admin_id'),
         Index('idx_event_token', 'token'),
@@ -665,6 +666,27 @@ def create_event():
         while Event.query.filter_by(token=token).first():
             token = generate_unique_token()
         try:
+            # Handle picture upload
+            picture_path = None
+            if form.picture.data:
+                file = form.picture.data
+                filename = f"event_{token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, filename)
+                file.save(file_path)
+                picture_path = f'/static/uploads/events/{filename}'
+
+            bg_path = None
+            if form.background_image.data:
+                file = form.background_image.data
+                filename = f"bg_{token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, filename)
+                file.save(file_path)
+                bg_path = f'/static/uploads/events/{filename}'
+
             event = Event(
                 token=token,
                 admin_id=admin.id,
@@ -674,8 +696,8 @@ def create_event():
                 target_amount=form.target_amount.data,
                 deadline=form.deadline.data,
                 event_date=form.event_date.data,
-                picture_url=form.picture_url.data,
-                background_image_url=form.background_image_url.data,
+                picture_url=picture_path,
+                background_image_url=bg_path,
                 account_name=form.account_name.data,
                 paybill=form.paybill.data,
                 mpesa_number=form.mpesa_number.data,
@@ -688,7 +710,7 @@ def create_event():
                 grace_period=int(form.grace_period.data or 0),
                 has_grace_period=bool(form.grace_period.data and form.grace_period.data > 0),
                 last_activity=datetime.utcnow(),
-                lock_message=form.lock_message.data if form.lock_message else None
+                lock_message=form.lock_message.data if form.lock_message.data else None
             )
             db.session.add(event)
             db.session.commit()
@@ -706,7 +728,6 @@ def event_landing(token):
         flash('Event is inactive.', 'error')
         return redirect(url_for('dashboard'))
     if get_page_lock_status(event) or event.disabled:
-        # If event is disabled, show locked page with custom message
         return render_template('event_locked.html', event=event)
     contributor = None
     if session.get('contributor_id'):
@@ -732,7 +753,30 @@ def edit_event(token):
         return redirect(url_for('dashboard'))
     form = EventForm(obj=event)
     if form.validate_on_submit():
+        # Handle file uploads (replace existing if new file uploaded)
+        picture_path = event.picture_url  # keep old if no new file
+        if form.picture.data:
+            file = form.picture.data
+            filename = f"event_{event.token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
+            upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            file.save(file_path)
+            picture_path = f'/static/uploads/events/{filename}'
+
+        bg_path = event.background_image_url
+        if form.background_image.data:
+            file = form.background_image.data
+            filename = f"bg_{event.token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
+            upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, filename)
+            file.save(file_path)
+            bg_path = f'/static/uploads/events/{filename}'
+
         form.populate_obj(event)
+        event.picture_url = picture_path
+        event.background_image_url = bg_path
         event.last_activity = datetime.utcnow()
         event.dormant_notified = False
         db.session.commit()
@@ -1471,7 +1515,7 @@ scheduler.start()
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Add missing columns (SQLite / PostgreSQL safe)
+        # Add missing columns (for SQLite)
         try:
             db.engine.execute('ALTER TABLE event ADD COLUMN lock_message TEXT')
         except Exception as e:
