@@ -84,9 +84,13 @@
             <a href="{{ url_for('manage_contributors', token=event.token) }}" class="btn btn-sm btn-gold me-1">
                 <i class="fas fa-users me-1"></i>Manage
             </a>
-            <a href="{{ url_for('event_landing', token=event.token) }}" class="btn btn-sm btn-glass">
+            <a href="{{ url_for('event_landing', token=event.token) }}" class="btn btn-sm btn-glass me-1">
                 <i class="fas fa-eye me-1"></i>View
             </a>
+            <!-- Share Button -->
+            <button class="btn btn-sm btn-glass copy-link-btn" data-url="{{ url_for('event_landing', token=event.token, _external=True) }}" title="Copy shareable link">
+                <i class="fas fa-link me-1"></i>Share
+            </button>
         </div>
     </div>
 </div>
@@ -100,4 +104,23 @@
         or <a href="{{ url_for('contact') }}" class="text-gold">Contact Support</a>
     </small>
 </div>
+
+<!-- JavaScript for copy to clipboard -->
+<script>
+    document.querySelectorAll('.copy-link-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const url = this.dataset.url;
+            navigator.clipboard.writeText(url).then(() => {
+                // Show a temporary tooltip or flash message
+                const originalHtml = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+                setTimeout(() => {
+                    this.innerHTML = originalHtml;
+                }, 2000);
+            }).catch(err => {
+                alert('Could not copy link. Please copy it manually: ' + url);
+            });
+        });
+    });
+</script>
 {% endblock %}
