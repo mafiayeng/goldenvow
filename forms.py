@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextAreaField, BooleanField, SelectField
-from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional, ValidationError
+from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional, ValidationError, Regexp
 from flask_wtf.file import FileField, FileAllowed
 
 class LoginForm(FlaskForm):
@@ -8,8 +8,12 @@ class LoginForm(FlaskForm):
     password = PasswordField('Password', validators=[DataRequired()])
 
 class RegisterForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=100)])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    username = StringField('Username', validators=[
+        DataRequired(), 
+        Length(min=3, max=100),
+        Regexp(r'^[a-zA-Z0-9_]+$', message='Username can only contain letters, numbers, and underscores.')
+    ])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
     email = StringField('Email', validators=[DataRequired(), Email()])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
     super_secret = StringField('Super Admin Secret', validators=[Optional()])
@@ -45,8 +49,12 @@ class ContributorLoginForm(FlaskForm):
     remember = BooleanField('Remember Me')
 
 class ContributorRegisterForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=100)])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    username = StringField('Username', validators=[
+        DataRequired(), 
+        Length(min=3, max=100),
+        Regexp(r'^[a-zA-Z0-9_]+$', message='Username can only contain letters, numbers, and underscores.')
+    ])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
     name = StringField('Full Name', validators=[DataRequired(), Length(max=150)])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
 
@@ -60,7 +68,7 @@ class ContactForm(FlaskForm):
 class ProfileForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
-    new_password = PasswordField('New Password (leave blank to keep current)', validators=[Optional(), Length(min=6)])
+    new_password = PasswordField('New Password (leave blank to keep current)', validators=[Optional(), Length(min=8)])
 
 class SettingsForm(FlaskForm):
     maintenance_mode = BooleanField('Enable Maintenance Mode')
@@ -68,11 +76,32 @@ class SettingsForm(FlaskForm):
     maintenance_eta = StringField('Estimated Return Time', validators=[Optional()])
 
 class ForgotPasswordForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
     email = StringField('Email', validators=[DataRequired(), Email()])
 
+class ResetPasswordCodeForm(FlaskForm):
+    code = StringField('Reset Code', validators=[DataRequired(), Length(min=6, max=6)])
+    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
+    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
+    def validate_confirm(self, field):
+        if field.data != self.password.data:
+            raise ValidationError('Passwords must match.')
+
+class ContributorForgotPasswordForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+
+class ContributorResetPasswordCodeForm(FlaskForm):
+    code = StringField('Reset Code', validators=[DataRequired(), Length(min=6, max=6)])
+    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
+    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
+    def validate_confirm(self, field):
+        if field.data != self.password.data:
+            raise ValidationError('Passwords must match.')
+
 class ResetPasswordForm(FlaskForm):
-    password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
-    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=6)])
+    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
+    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
     def validate_confirm(self, field):
         if field.data != self.password.data:
             raise ValidationError('Passwords must match.')
