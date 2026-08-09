@@ -3,26 +3,36 @@ from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextA
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional, ValidationError, Regexp
 from flask_wtf.file import FileField, FileAllowed
 
+
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
 
+
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[
-        DataRequired(), 
+        DataRequired(),
         Length(min=3, max=100),
         Regexp(r'^[a-zA-Z0-9_]+$', message='Username can only contain letters, numbers, and underscores.')
     ])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
+    password = PasswordField('Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
     email = StringField('Email', validators=[DataRequired(), Email()])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
     super_secret = StringField('Super Admin Secret', validators=[Optional()])
     referral_code = StringField('Referral Code', validators=[Optional()])
 
+
 class EventForm(FlaskForm):
     event_type = SelectField('Event Type', choices=[
-        ('dowry', 'Dowry'), ('burial', 'Burial'), ('medical', 'Medical'),
-        ('education', 'Education'), ('harambee', 'Harambee'), ('other', 'Other')
+        ('dowry', 'Dowry'),
+        ('burial', 'Burial'),
+        ('medical', 'Medical'),
+        ('education', 'Education'),
+        ('harambee', 'Harambee'),
+        ('other', 'Other')
     ], validators=[DataRequired()])
     title = StringField('Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description', validators=[Optional()])
@@ -43,20 +53,26 @@ class EventForm(FlaskForm):
     grace_period = FloatField('Grace Period (hours)', validators=[Optional(), NumberRange(min=0)])
     lock_message = TextAreaField('Lock Message (shown when page is locked)', validators=[Optional()])
 
+
 class ContributorLoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
     remember = BooleanField('Remember Me')
 
+
 class ContributorRegisterForm(FlaskForm):
     username = StringField('Username', validators=[
-        DataRequired(), 
+        DataRequired(),
         Length(min=3, max=100),
         Regexp(r'^[a-zA-Z0-9_]+$', message='Username can only contain letters, numbers, and underscores.')
     ])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
+    password = PasswordField('Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
     name = StringField('Full Name', validators=[DataRequired(), Length(max=150)])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
+
 
 class ContactForm(FlaskForm):
     name = StringField('Name', validators=[DataRequired(), Length(max=150)])
@@ -65,43 +81,71 @@ class ContactForm(FlaskForm):
     subject = StringField('Subject', validators=[DataRequired(), Length(max=200)])
     message = TextAreaField('Message', validators=[DataRequired()])
 
+
 class ProfileForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
     new_password = PasswordField('New Password (leave blank to keep current)', validators=[Optional(), Length(min=8)])
+
 
 class SettingsForm(FlaskForm):
     maintenance_mode = BooleanField('Enable Maintenance Mode')
     maintenance_message = TextAreaField('Maintenance Message', validators=[Optional()])
     maintenance_eta = StringField('Estimated Return Time', validators=[Optional()])
 
+
 class ForgotPasswordForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     email = StringField('Email', validators=[DataRequired(), Email()])
 
+
 class ResetPasswordCodeForm(FlaskForm):
     code = StringField('Reset Code', validators=[DataRequired(), Length(min=6, max=6)])
-    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
-    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
+    password = PasswordField('New Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+    confirm = PasswordField('Confirm Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+
     def validate_confirm(self, field):
         if field.data != self.password.data:
             raise ValidationError('Passwords must match.')
+
 
 class ContributorForgotPasswordForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     email = StringField('Email', validators=[DataRequired(), Email()])
 
+
 class ContributorResetPasswordCodeForm(FlaskForm):
     code = StringField('Reset Code', validators=[DataRequired(), Length(min=6, max=6)])
-    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
-    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
+    password = PasswordField('New Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+    confirm = PasswordField('Confirm Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+
     def validate_confirm(self, field):
         if field.data != self.password.data:
             raise ValidationError('Passwords must match.')
 
+
 class ResetPasswordForm(FlaskForm):
-    password = PasswordField('New Password', validators=[DataRequired(), Length(min=8)])
-    confirm = PasswordField('Confirm Password', validators=[DataRequired(), Length(min=8)])
+    password = PasswordField('New Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+    confirm = PasswordField('Confirm Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters.')
+    ])
+
     def validate_confirm(self, field):
         if field.data != self.password.data:
             raise ValidationError('Passwords must match.')
