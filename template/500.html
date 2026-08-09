@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Server Error{% endblock %}
+{% block content %}
+<div class="text-center glass p-5" style="max-width: 600px; margin: 4rem auto;">
+    <h1 class="display-4"><i class="fas fa-bug text-gold"></i> 500</h1>
+    <p class="lead">Something went wrong on our end.</p>
+    <p style="color: var(--text-muted);">We're working to fix it. Please try again later.</p>
+    <p style="color: var(--text-muted);">If the problem persists, contact support.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-gold mt-3">Go Home</a>
+</div>
+{% endblock %}
