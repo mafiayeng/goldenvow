@@ -62,6 +62,8 @@ class ProfileForm(FlaskForm):
 
 class SettingsForm(FlaskForm):
     maintenance_mode = BooleanField('Enable Maintenance Mode')
+    maintenance_message = TextAreaField('Maintenance Message', validators=[Optional()])
+    maintenance_eta = StringField('Estimated Return Time', validators=[Optional()])
 
 class ForgotPasswordForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
