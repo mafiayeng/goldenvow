@@ -1,5 +1,5 @@
 # =============================================================================
-# GOLDENVOW – COMPLETE APPLICATION (FULL)
+# GOLDENVOW – FINAL COMPLETE APPLICATION (with Light/Dark Toggle)
 # =============================================================================
 import os
 import uuid
@@ -21,6 +21,7 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func, inspect, Index
 from flask_wtf import FlaskForm, CSRFProtect
+from flask_wtf.csrf import CSRFError
 from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextAreaField, BooleanField, SelectField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, ValidationError, Optional
 import bcrypt
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- App Setup ----------
 app = Flask(__name__)
-app.template_folder = 'template'   # your folder name
+app.template_folder = 'template'
 app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY environment variable is not set")
@@ -51,10 +52,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.permanent_session_lifetime = timedelta(days=7)
 
-# CSRF Protection
 csrf = CSRFProtect(app)
-
-# ---------- Database ----------
 db = SQLAlchemy(app)
 
 # ---------- Constants ----------
@@ -63,7 +61,7 @@ SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '0737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
-MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
@@ -71,7 +69,6 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USER = os.environ.get('EMAIL_USER', 'goldenvowsupport@gmail.com')
 EMAIL_PASS = os.environ.get('EMAIL_PASS')
 
-# Status constants
 STATUS_PENDING = 'pending'
 STATUS_APPROVED = 'approved'
 STATUS_DECLINED = 'declined'
@@ -79,7 +76,7 @@ STATUS_PAID = 'paid'
 STATUS_FAILED = 'failed'
 STATUS_CANCELLED = 'cancelled'
 
-# ---------- Models (with indexes) ----------
+# ---------- Models ----------
 class Admin(db.Model):
     __tablename__ = 'admin'
     id = db.Column(db.Integer, primary_key=True)
@@ -135,11 +132,15 @@ class Event(db.Model):
     super_admin_message = db.Column(db.Text, nullable=True)
     disabled = db.Column(db.Boolean, default=False)
     disabled_reason = db.Column(db.Text, nullable=True)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    dormant_notified = db.Column(db.Boolean, default=False)
+    dormant_notified_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
         Index('idx_event_admin_id', 'admin_id'),
         Index('idx_event_token', 'token'),
         Index('idx_event_is_active', 'is_active'),
+        Index('idx_event_last_activity', 'last_activity'),
     )
 
 class Contributor(db.Model):
@@ -182,10 +183,7 @@ class Payment(db.Model):
     amount = db.Column(db.Float, nullable=False)
     date_paid = db.Column(db.DateTime, default=datetime.utcnow)
     note = db.Column(db.String(200))
-
-    __table_args__ = (
-        Index('idx_payment_contributor_id', 'contributor_id'),
-    )
+    __table_args__ = (Index('idx_payment_contributor_id', 'contributor_id'),)
 
 class ChatMessage(db.Model):
     __tablename__ = 'chat_message'
@@ -195,11 +193,7 @@ class ChatMessage(db.Model):
     sender_type = db.Column(db.String(20), default='contributor')
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        Index('idx_chat_event_id', 'event_id'),
-        Index('idx_chat_timestamp', 'timestamp'),
-    )
+    __table_args__ = (Index('idx_chat_event_id', 'event_id'), Index('idx_chat_timestamp', 'timestamp'),)
 
 class Conversation(db.Model):
     __tablename__ = 'conversation'
@@ -219,10 +213,7 @@ class PrivateMessage(db.Model):
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
-
-    __table_args__ = (
-        Index('idx_private_conversation_id', 'conversation_id'),
-    )
+    __table_args__ = (Index('idx_private_conversation_id', 'conversation_id'),)
 
 class Notification(db.Model):
     __tablename__ = 'notification'
@@ -234,11 +225,7 @@ class Notification(db.Model):
     type = db.Column(db.String(50), default='info')
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        Index('idx_notification_admin_id', 'admin_id'),
-        Index('idx_notification_created_at', 'created_at'),
-    )
+    __table_args__ = (Index('idx_notification_admin_id', 'admin_id'), Index('idx_notification_created_at', 'created_at'),)
 
 class Testimonial(db.Model):
     __tablename__ = 'testimonial'
@@ -249,10 +236,7 @@ class Testimonial(db.Model):
     message = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_approved = db.Column(db.Boolean, default=False)
-
-    __table_args__ = (
-        Index('idx_testimonial_event_id', 'event_id'),
-    )
+    __table_args__ = (Index('idx_testimonial_event_id', 'event_id'),)
 
 class Withdrawal(db.Model):
     __tablename__ = 'withdrawal'
@@ -264,11 +248,7 @@ class Withdrawal(db.Model):
     status = db.Column(db.String(20), default=STATUS_PENDING)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
-
-    __table_args__ = (
-        Index('idx_withdrawal_status', 'status'),
-        Index('idx_withdrawal_admin_id', 'admin_id'),
-    )
+    __table_args__ = (Index('idx_withdrawal_status', 'status'), Index('idx_withdrawal_admin_id', 'admin_id'),)
 
 class ContactMessage(db.Model):
     __tablename__ = 'contact_message'
@@ -280,10 +260,7 @@ class ContactMessage(db.Model):
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        Index('idx_contact_created_at', 'created_at'),
-    )
+    __table_args__ = (Index('idx_contact_created_at', 'created_at'),)
 
 class PasswordReset(db.Model):
     __tablename__ = 'password_reset'
@@ -293,11 +270,7 @@ class PasswordReset(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __table_args__ = (
-        Index('idx_reset_token', 'token'),
-        Index('idx_reset_expires', 'expires_at'),
-    )
+    __table_args__ = (Index('idx_reset_token', 'token'), Index('idx_reset_expires', 'expires_at'),)
 
 class Setting(db.Model):
     __tablename__ = 'setting'
@@ -357,16 +330,11 @@ def get_fee_percentage(admin_id):
     if not admin:
         return SERVICE_FEE_PERCENTAGE
     count = admin.referral_count
-    if count >= 9:
-        return 1.54
-    elif count >= 4:
-        return 1.61
-    elif count >= 2:
-        return 1.72
-    elif count >= 1:
-        return 1.80
-    else:
-        return SERVICE_FEE_PERCENTAGE
+    if count >= 9: return 1.54
+    elif count >= 4: return 1.61
+    elif count >= 2: return 1.72
+    elif count >= 1: return 1.80
+    else: return SERVICE_FEE_PERCENTAGE
 
 def calculate_fee(amount, admin_id=None):
     fee_pct = get_fee_percentage(admin_id) if admin_id else SERVICE_FEE_PERCENTAGE
@@ -392,9 +360,7 @@ def get_admin_total_fees(admin_id):
         .filter(Event.admin_id == admin_id, Contributor.status == STATUS_APPROVED).scalar() or 0
 
 def is_fee_overdue(event):
-    if not event.first_contribution_date:
-        return False
-    if event.fee_paid:
+    if not event.first_contribution_date or event.fee_paid:
         return False
     total_fee = get_event_total_fee(event.id)
     if total_fee < 50.0:
@@ -407,17 +373,11 @@ def is_fee_overdue(event):
     return False
 
 def get_page_lock_status(event, contributor_token=None):
-    if event.disabled:
-        return True
+    if event.disabled or (not event.first_contribution_date) or event.fee_paid:
+        return False
     if contributor_token:
         return False
-    if not event.first_contribution_date:
-        return False
-    if event.fee_paid:
-        return False
-    if is_fee_overdue(event):
-        return True
-    return False
+    return is_fee_overdue(event)
 
 def get_daily_note(event_type, day):
     notes = {
@@ -435,7 +395,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def generate_event_logo(event, size=120):
-    """Generate an SVG logo based on event type and title."""
     colors = {
         'dowry': {'bg1': '#1A2A3A', 'bg2': '#D4AF37', 'symbol': '🐂', 'ring': '#D4AF37'},
         'burial': {'bg1': '#2C2C2C', 'bg2': '#C0C0C0', 'symbol': '🕊️', 'ring': '#C0C0C0'},
@@ -516,6 +475,37 @@ def utility_processor():
         request=request
     )
 
+# ---------- Maintenance Check ----------
+@app.before_request
+def check_maintenance():
+    if request.endpoint in ['settings', 'static', 'login', 'register', 'contributor_login', 'contributor_register']:
+        return
+    maintenance = Setting.query.filter_by(key='maintenance_mode').first()
+    if maintenance and maintenance.value == 'True':
+        admin = Admin.query.get(session.get('admin_id'))
+        if admin and admin.is_super_admin:
+            return
+        msg_setting = Setting.query.filter_by(key='maintenance_message').first()
+        eta_setting = Setting.query.filter_by(key='maintenance_eta').first()
+        msg = msg_setting.value if msg_setting else "We're currently performing scheduled maintenance."
+        eta = eta_setting.value if eta_setting else "We'll be back soon."
+        return render_template('maintenance.html', message=msg, eta=eta), 503
+
+# ---------- Error Handlers ----------
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error(f"500 error: {e}")
+    return render_template('500.html'), 500
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    flash('CSRF token missing or invalid. Please refresh the page and try again.', 'error')
+    return redirect(request.referrer or url_for('index'))
+
 # ---------- Routes ----------
 @app.route('/')
 def index():
@@ -535,23 +525,29 @@ def login():
     if form.validate_on_submit():
         username = form.username.data.strip()
         password = form.password.data.strip()
-        admin = Admin.query.filter_by(username=username, is_active=True).first()
-        if admin and check_password(password, admin.password_hash):
-            session.permanent = True
-            session['admin_id'] = admin.id
-            admin.last_login = datetime.utcnow()
-            db.session.commit()
-            flash('Logged in successfully.', 'success')
-            # If admin has no events, redirect to create event
-            if not admin.is_super_admin:
-                events_count = Event.query.filter_by(admin_id=admin.id).count()
-                if events_count == 0:
-                    flash('Welcome! Let\'s create your first event.', 'info')
-                    return redirect(url_for('create_event'))
-            if admin.is_super_admin:
-                return redirect(url_for('super_dashboard'))
-            return redirect(url_for('dashboard'))
-        flash('Invalid username or password.', 'error')
+        admin = Admin.query.filter_by(username=username).first()
+        if not admin:
+            flash('No account found with that username. Please register.', 'error')
+            return render_template('login.html', form=form)
+        if not admin.is_active:
+            flash('This account is disabled. Contact support.', 'error')
+            return render_template('login.html', form=form)
+        if not check_password(password, admin.password_hash):
+            flash('Incorrect password. Please try again.', 'error')
+            return render_template('login.html', form=form)
+        session.permanent = True
+        session['admin_id'] = admin.id
+        admin.last_login = datetime.utcnow()
+        db.session.commit()
+        flash('Logged in successfully.', 'success')
+        if not admin.is_super_admin:
+            events_count = Event.query.filter_by(admin_id=admin.id).count()
+            if events_count == 0:
+                flash('Welcome! Let\'s create your first event.', 'info')
+                return redirect(url_for('create_event'))
+        if admin.is_super_admin:
+            return redirect(url_for('super_dashboard'))
+        return redirect(url_for('dashboard'))
     return render_template('login.html', form=form)
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -570,6 +566,9 @@ def register():
             return render_template('register.html', form=form)
         if Admin.query.filter_by(email=email).first():
             flash('Email already registered.', 'error')
+            return render_template('register.html', form=form)
+        if Admin.query.filter_by(phone=phone).first():
+            flash('Phone number already used by another admin.', 'error')
             return render_template('register.html', form=form)
 
         referral_code = generate_referral_code()
@@ -601,7 +600,6 @@ def register():
             else:
                 flash('Invalid referral code.', 'warning')
 
-        # Auto-login and redirect to create event
         session['admin_id'] = admin.id
         session.permanent = True
         admin.last_login = datetime.utcnow()
@@ -653,7 +651,7 @@ def create_event():
         flash('Super admins cannot create events.', 'error')
         return redirect(url_for('dashboard'))
     form = EventForm()
-    events_count = Event.query.filter_by(admin_id=admin.id).count()  # for welcome banner
+    events_count = Event.query.filter_by(admin_id=admin.id).count()
     if form.validate_on_submit():
         token = generate_unique_token()
         while Event.query.filter_by(token=token).first():
@@ -680,7 +678,8 @@ def create_event():
                 payment_instructions=form.payment_instructions.data,
                 whatsapp_contact=form.whatsapp_contact.data,
                 grace_period=int(form.grace_period.data or 0),
-                has_grace_period=bool(form.grace_period.data and form.grace_period.data > 0)
+                has_grace_period=bool(form.grace_period.data and form.grace_period.data > 0),
+                last_activity=datetime.utcnow()
             )
             db.session.add(event)
             db.session.commit()
@@ -707,9 +706,11 @@ def event_landing(token):
     testimonials = Testimonial.query.filter_by(event_id=event.id, is_approved=True).order_by(desc(Testimonial.created_at)).limit(10).all()
     days = (datetime.utcnow() - event.created_at).days + 1
     daily_note = get_daily_note(event.event_type, days)
+    event.last_activity = datetime.utcnow()
+    db.session.commit()
     return render_template('event_landing.html', event=event, total_raised=total_raised,
                             chat_messages=chat_messages, testimonials=testimonials, daily_note=daily_note,
-                            contributor=contributor, token=token)
+                            contributor=contributor, token=token, show_back_button=True)
 
 @app.route('/events/<token>/edit', methods=['GET', 'POST'])
 @admin_login_required
@@ -722,10 +723,12 @@ def edit_event(token):
     form = EventForm(obj=event)
     if form.validate_on_submit():
         form.populate_obj(event)
+        event.last_activity = datetime.utcnow()
+        event.dormant_notified = False
         db.session.commit()
         flash('Event updated.', 'success')
         return redirect(url_for('dashboard'))
-    return render_template('edit_event.html', form=form, event=event)
+    return render_template('edit_event.html', form=form, event=event, show_back_button=True)
 
 @app.route('/events/<token>/delete', methods=['POST'])
 @admin_login_required
@@ -753,6 +756,7 @@ def toggle_event_active(token):
         flash('Unauthorized.', 'error')
         return redirect(url_for('dashboard'))
     event.is_active = not event.is_active
+    event.last_activity = datetime.utcnow()
     db.session.commit()
     flash(f"Event {'activated' if event.is_active else 'deactivated'}.", 'success')
     return redirect(url_for('dashboard'))
@@ -766,6 +770,7 @@ def lock_event_page(token):
         flash('Unauthorized.', 'error')
         return redirect(url_for('dashboard'))
     event.disabled = not event.disabled
+    event.last_activity = datetime.utcnow()
     db.session.commit()
     flash(f"Page {'locked' if event.disabled else 'unlocked'}.", 'success')
     return redirect(url_for('dashboard'))
@@ -780,7 +785,7 @@ def manage_contributors(token):
         return redirect(url_for('dashboard'))
     page = request.args.get('page', 1, type=int)
     contributors = Contributor.query.filter_by(event_id=event.id).order_by(desc(Contributor.created_at)).paginate(page=page, per_page=15)
-    return render_template('contributors.html', event=event, contributors=contributors)
+    return render_template('contributors.html', event=event, contributors=contributors, show_back_button=True)
 
 @app.route('/events/<token>/contributor/add', methods=['POST'])
 @admin_login_required
@@ -822,7 +827,9 @@ def add_contributor(token):
     db.session.commit()
     if not event.first_contribution_date:
         event.first_contribution_date = datetime.utcnow()
-        db.session.commit()
+    event.last_activity = datetime.utcnow()
+    event.dormant_notified = False
+    db.session.commit()
     flash('Contributor added successfully.', 'success')
     return redirect(url_for('manage_contributors', token=event.token))
 
@@ -843,7 +850,7 @@ def contributor_view(token):
         flash('You are not authorized to view this page.', 'error')
         return redirect(url_for('index'))
     return render_template('contributor_view.html', contrib=contrib, event=event,
-                            payments=payments, show_payments=show_payments)
+                            payments=payments, show_payments=show_payments, show_back_button=True)
 
 @app.route('/contributor/<token>/approve', methods=['POST'])
 @admin_login_required
@@ -876,6 +883,9 @@ def approve_contributor(token):
     contrib.completed_at = datetime.utcnow()
     payment = Payment(contributor_id=contrib.id, amount=received, note=f'Approved. Fee: KES {fee}')
     db.session.add(payment)
+    db.session.commit()
+    event.last_activity = datetime.utcnow()
+    event.dormant_notified = False
     db.session.commit()
     flash(f'Approved! Fee: KES {fee:.2f}', 'success')
     return redirect(url_for('manage_contributors', token=event.token))
@@ -931,6 +941,9 @@ def submit_payment_proof(token):
             return redirect(url_for('contributor_view', token=token))
     contrib.payment_proof_text = text
     db.session.commit()
+    if event:
+        event.last_activity = datetime.utcnow()
+        db.session.commit()
     admin = Admin.query.get(event.admin_id)
     create_notification(admin.id, f'Payment proof from {contrib.name}.', 'info', event.id, contrib.id)
     flash('Proof submitted successfully.', 'info')
@@ -974,18 +987,25 @@ def contributor_login():
     if form.validate_on_submit():
         username = form.username.data.strip()
         password = form.password.data.strip()
-        contrib = Contributor.query.filter_by(username=username, is_active=True).first()
-        if contrib and check_password(password, contrib.password_hash):
-            session['contributor_id'] = contrib.id
-            contrib.last_login = datetime.utcnow()
-            db.session.commit()
-            if form.remember.data:
-                session.permanent = True
-            flash('Logged in.', 'success')
-            if event_token:
-                return redirect(url_for('event_landing', token=event_token))
-            return redirect(url_for('contributor_dashboard'))
-        flash('Invalid credentials.', 'error')
+        contrib = Contributor.query.filter_by(username=username).first()
+        if not contrib:
+            flash('No account found with that username. Please register.', 'error')
+            return render_template('contributor_login.html', form=form, event_token=event_token)
+        if not contrib.is_active:
+            flash('This account is disabled. Contact support.', 'error')
+            return render_template('contributor_login.html', form=form, event_token=event_token)
+        if not check_password(password, contrib.password_hash):
+            flash('Incorrect password. Please try again.', 'error')
+            return render_template('contributor_login.html', form=form, event_token=event_token)
+        session['contributor_id'] = contrib.id
+        contrib.last_login = datetime.utcnow()
+        db.session.commit()
+        if form.remember.data:
+            session.permanent = True
+        flash('Logged in successfully.', 'success')
+        if event_token:
+            return redirect(url_for('event_landing', token=event_token))
+        return redirect(url_for('contributor_dashboard'))
     return render_template('contributor_login.html', form=form, event_token=event_token)
 
 @app.route('/contributor/register', methods=['GET', 'POST'])
@@ -1110,18 +1130,31 @@ def mark_all_notifications_read():
 @admin_login_required
 @super_admin_required
 def settings():
-    setting = Setting.query.filter_by(key='maintenance_mode').first()
-    if not setting:
-        setting = Setting(key='maintenance_mode', value='False')
-        db.session.add(setting)
-        db.session.commit()
+    maintenance = Setting.query.filter_by(key='maintenance_mode').first()
+    if not maintenance:
+        maintenance = Setting(key='maintenance_mode', value='False')
+        db.session.add(maintenance)
+    msg = Setting.query.filter_by(key='maintenance_message').first()
+    if not msg:
+        msg = Setting(key='maintenance_message', value='We are currently performing scheduled maintenance.')
+        db.session.add(msg)
+    eta = Setting.query.filter_by(key='maintenance_eta').first()
+    if not eta:
+        eta = Setting(key='maintenance_eta', value='We expect to be back online within 2 hours.')
+        db.session.add(eta)
+    db.session.commit()
+
     form = SettingsForm()
     if form.validate_on_submit():
-        setting.value = 'True' if form.maintenance_mode.data else 'False'
+        maintenance.value = 'True' if form.maintenance_mode.data else 'False'
+        msg.value = form.maintenance_message.data or 'We are currently performing scheduled maintenance.'
+        eta.value = form.maintenance_eta.data or 'We\'ll be back soon.'
         db.session.commit()
         flash('Settings updated.', 'success')
         return redirect(url_for('settings'))
-    form.maintenance_mode.data = (setting.value == 'True')
+    form.maintenance_mode.data = (maintenance.value == 'True')
+    form.maintenance_message.data = msg.value
+    form.maintenance_eta.data = eta.value
     return render_template('settings.html', form=form)
 
 @app.route('/withdrawals')
@@ -1137,7 +1170,6 @@ def withdrawals():
 def withdrawal_request():
     if request.method == 'GET':
         return render_template('request_withdrawal.html')
-    # POST
     try:
         amount = float(request.form.get('amount', 0))
         phone = request.form.get('phone', '').strip()
@@ -1196,6 +1228,19 @@ def toggle_admin(aid):
     flash('Admin status toggled.', 'success')
     return redirect(url_for('manage_admins'))
 
+@app.route('/admin/<int:aid>/toggle-super', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def toggle_super_admin(aid):
+    admin = Admin.query.get_or_404(aid)
+    if admin.id == session['admin_id']:
+        flash('You cannot change your own super admin status.', 'error')
+        return redirect(url_for('manage_admins'))
+    admin.is_super_admin = not admin.is_super_admin
+    db.session.commit()
+    flash(f"Admin '{admin.username}' super admin status toggled.", 'success')
+    return redirect(url_for('manage_admins'))
+
 @app.route('/admin/<int:aid>/delete', methods=['POST'])
 @admin_login_required
 @super_admin_required
@@ -1227,6 +1272,77 @@ def add_testimonial(token):
     db.session.commit()
     flash('Thank you for your testimonial! It will be reviewed.', 'success')
     return redirect(url_for('event_landing', token=token))
+
+@app.route('/ai-helper')
+@admin_login_required
+def ai_helper():
+    return render_template('ai_helper.html', show_back_button=True)
+
+@app.route('/api/chat', methods=['POST'])
+@admin_login_required
+def chat():
+    data = request.get_json()
+    user_message = data.get('message', '').strip().lower()
+    if not user_message:
+        return jsonify({'error': 'Message is required'}), 400
+
+    admin = Admin.query.get(session['admin_id'])
+    admin_name = admin.username if admin else "Unknown"
+    admin_email = admin.email if admin else "no-email@example.com"
+
+    total_events = Event.query.count()
+    total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
+    pending_contributions = Contributor.query.filter_by(status=STATUS_PENDING).count()
+    total_fees = get_global_total_fees()
+    active_admins = Admin.query.filter_by(is_active=True).count()
+    super_admins = Admin.query.filter_by(is_super_admin=True).count()
+    recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
+    recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
+
+    def escalate_to_support(question):
+        subject = f"AI Assistant Support Request from {admin_name}"
+        body = f"""
+Admin: {admin_name}
+Email: {admin_email}
+Question:
+{question}
+        """
+        send_email(SUPPORT_EMAIL, subject, body)
+        return "📧 Your question has been forwarded to our support team. They will get back to you shortly."
+
+    def respond(msg):
+        if any(word in msg for word in ['human', 'agent', 'support', 'talk to', 'contact support']):
+            return escalate_to_support(user_message)
+        if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
+            return f"📊 You currently have **{total_events}** events."
+        if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
+            return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
+        if 'pending' in msg or 'approval' in msg:
+            return f"⏳ There are **{pending_contributions}** pending contribution approvals."
+        if 'fee' in msg or 'fees' in msg:
+            return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
+        if 'admin' in msg:
+            if 'active' in msg:
+                return f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."
+            return f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."
+        if 'recent' in msg or 'latest' in msg:
+            if recent_events_text:
+                return f"📅 Recent events:\n{recent_events_text}"
+            return "No recent events found."
+        if 'help' in msg or 'guide' in msg or 'how' in msg:
+            return """📖 **Quick Guide**
+1. **Create an event** – click “Create Event” and fill the details.
+2. **Add contributors** – under the event, click “Manage” → “Add Contributor”.
+3. **Approve contributions** – when a contributor submits proof, review and click “Approve”.
+4. **Withdraw fees** – as super admin, go to Withdrawals → Request.
+5. **Lock page** – if you want to disable contributions, use the “Lock Page” button.
+For more, visit the Help page."""
+        if 'hello' in msg or 'hi' in msg or 'hey' in msg:
+            return "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."
+        return escalate_to_support(user_message)
+
+    response = respond(user_message)
+    return jsonify({'response': response})
 
 # ---------- Password Reset ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
@@ -1266,7 +1382,6 @@ def reset_password(token):
         return redirect(url_for('login'))
     return render_template('reset_password.html', form=form)
 
-# ---------- Feature Requests ----------
 @app.route('/manage-feature-requests')
 @admin_login_required
 @super_admin_required
@@ -1298,26 +1413,57 @@ def create_super_admin():
     db.session.commit()
     return f"Super Admin created!<br>Username: {username}<br>Password: {password}<br><a href='/login'>Login</a>"
 
-# ---------- Scheduler ----------
-def check_pending_contributions():
+# ---------- Scheduler Jobs ----------
+def check_dormant_events():
     with app.app_context():
-        pending = Contributor.query.filter_by(status=STATUS_PENDING).all()
-        for c in pending:
-            event = Event.query.get(c.event_id)
-            if event:
-                admin = Admin.query.get(event.admin_id)
-                if admin:
-                    create_notification(admin.id, f'Pending contribution from {c.name}', 'reminder', event.id, c.id)
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        events = Event.query.filter(
+            Event.is_active == True,
+            Event.last_activity < cutoff,
+            Event.dormant_notified == False
+        ).all()
+        for event in events:
+            admin = Admin.query.get(event.admin_id)
+            if admin and admin.email:
+                subject = f"⚠️ Your event '{event.title}' is inactive – action required"
+                body = f"""
+Your event '{event.title}' has had no activity for 7 days.
+To keep it active, please log in and make a change (e.g., add a contributor, edit details).
+If we don't hear from you within 7 hours, the event will be automatically deleted.
+"""
+                send_email(admin.email, subject, body)
+                event.dormant_notified = True
+                event.dormant_notified_at = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"Dormant notification sent for event {event.id}")
+
+def delete_dormant_events():
+    with app.app_context():
+        cutoff = datetime.utcnow() - timedelta(hours=7)
+        events = Event.query.filter(
+            Event.dormant_notified == True,
+            Event.dormant_notified_at < cutoff,
+            Event.is_active == True
+        ).all()
+        for event in events:
+            db.session.delete(event)
+            db.session.commit()
+            logger.info(f"Dormant event {event.id} deleted")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(check_pending_contributions, 'interval', hours=3)
+scheduler.add_job(check_dormant_events, 'interval', days=1)
+scheduler.add_job(delete_dormant_events, 'interval', hours=1)
 scheduler.start()
 
 # ---------- Main ----------
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        for key, default in [('maintenance_mode', 'False'), ('maintenance_message', ''), ('maintenance_eta', '')]:
+        for key, default in [
+            ('maintenance_mode', 'False'),
+            ('maintenance_message', 'We are currently performing scheduled maintenance.'),
+            ('maintenance_eta', 'We expect to be back online within 2 hours.'),
+        ]:
             if not Setting.query.filter_by(key=key).first():
                 db.session.add(Setting(key=key, value=default))
         db.session.commit()
