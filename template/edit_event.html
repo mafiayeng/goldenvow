@@ -1,103 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Edit Event{% endblock %}
 {% block content %}
-<h2 class="golden-text">✏️ Edit: {{ event.title }}</h2>
-<div class="glass-card p-4">
-    <form method="POST" class="row g-3">
-        <div class="col-md-6">
-            <label class="form-label">Event Type</label>
-            <select name="event_type" class="form-select bg-dark text-light">
-                <option value="dowry" {% if event.event_type == 'dowry' %}selected{% endif %}>🐂 Dowry</option>
-                <option value="burial" {% if event.event_type == 'burial' %}selected{% endif %}>🕊️ Burial</option>
-                <option value="medical" {% if event.event_type == 'medical' %}selected{% endif %}>❤️ Medical</option>
-                <option value="education" {% if event.event_type == 'education' %}selected{% endif %}>🎓 Education</option>
-                <option value="harambee" {% if event.event_type == 'harambee' %}selected{% endif %}>🤝 Harambee</option>
-                <option value="other" {% if event.event_type == 'other' %}selected{% endif %}>✦ Other</option>
-            </select>
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="glass p-4 p-md-5">
+            <h2 class="mb-4"><i class="fas fa-edit text-gold me-2"></i>Edit Event</h2>
+            <form method="POST">
+                {{ form.csrf_token }}
+                <!-- All existing fields ... -->
+                {{ form.event_type.label(class="form-label") }}
+                {{ form.event_type(class="form-select") }}
+                ...
+                <!-- NEW: Lock Message field -->
+                <div class="mb-3">
+                    {{ form.lock_message.label(class="form-label") }}
+                    {{ form.lock_message(class="form-control", rows=3, placeholder="Optional – shown when event page is locked") }}
+                    <small class="text-muted">Leave blank to use the default lock message.</small>
+                </div>
+                <button type="submit" class="btn btn-gold w-100">Update Event</button>
+            </form>
         </div>
-        <div class="col-md-6">
-            <label class="form-label">Event Title <span class="text-danger">*</span></label>
-            <input type="text" name="title" class="form-control bg-dark text-light" value="{{ event.title }}" required>
-        </div>
-        <div class="col-12">
-            <label class="form-label">Description</label>
-            <textarea name="description" class="form-control bg-dark text-light" rows="3">{{ event.description or '' }}</textarea>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Target Amount (KES)</label>
-            <input type="number" name="target_amount" class="form-control bg-dark text-light" step="0.01" value="{{ event.target_amount }}" required>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Event Date</label>
-            <input type="datetime-local" name="event_date" class="form-control bg-dark text-light" value="{{ event.event_date.strftime('%Y-%m-%dT%H:%M') }}" required>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Deadline</label>
-            <input type="datetime-local" name="deadline" class="form-control bg-dark text-light" value="{{ event.deadline.strftime('%Y-%m-%dT%H:%M') }}" required>
-        </div>
-        <div class="col-12">
-            <label class="form-label">Picture URL</label>
-            <input type="url" name="picture_url" class="form-control bg-dark text-light" value="{{ event.picture_url or '' }}">
-        </div>
-        <div class="col-12">
-            <label class="form-label">Background Image URL</label>
-            <input type="url" name="background_image_url" class="form-control bg-dark text-light" value="{{ event.background_image_url or '' }}">
-        </div>
-        <h5 class="golden-text mt-3">💳 Payment Details</h5>
-        <div class="col-md-12">
-            <label class="form-label">Account Name (M-Pesa/Bank Account Holder) <span class="text-danger">*</span></label>
-            <input type="text" name="account_name" class="form-control bg-dark text-light" value="{{ event.account_name or '' }}" placeholder="e.g. Alex Kiprop" required>
-            <div class="text-muted-light small mt-1">
-                <i class="bi bi-info-circle"></i> 
-                This name is displayed publicly and used for payment verification.
-            </div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Paybill</label>
-            <input type="text" name="paybill" class="form-control bg-dark text-light" value="{{ event.paybill or '' }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">M-Pesa Number</label>
-            <input type="text" name="mpesa_number" class="form-control bg-dark text-light" value="{{ event.mpesa_number or '' }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Till Number</label>
-            <input type="text" name="till_number" class="form-control bg-dark text-light" value="{{ event.till_number or '' }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">WhatsApp Contact</label>
-            <input type="text" name="whatsapp_contact" class="form-control bg-dark text-light" value="{{ event.whatsapp_contact or '' }}">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Name</label>
-            <input type="text" name="bank_name" class="form-control bg-dark text-light" value="{{ event.bank_name or '' }}">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Account Name</label>
-            <input type="text" name="bank_account_name" class="form-control bg-dark text-light" value="{{ event.bank_account_name or '' }}">
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Bank Account Number</label>
-            <input type="text" name="bank_account_number" class="form-control bg-dark text-light" value="{{ event.bank_account_number or '' }}">
-        </div>
-        <div class="col-12">
-            <label class="form-label">Payment Instructions</label>
-            <textarea name="payment_instructions" class="form-control bg-dark text-light" rows="2">{{ event.payment_instructions or '' }}</textarea>
-        </div>
-        <div class="col-md-6">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="has_grace_period" value="1" {% if event.has_grace_period %}checked{% endif %}>
-                <label class="form-check-label">Enable Grace Period</label>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <label class="form-label">Grace Period (days)</label>
-            <input type="number" name="grace_period" class="form-control bg-dark text-light" value="{{ event.grace_period or 0 }}">
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-gold">💾 Update Event</button>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
-        </div>
-    </form>
+    </div>
 </div>
 {% endblock %}
