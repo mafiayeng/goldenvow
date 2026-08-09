@@ -50,7 +50,7 @@ csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
-SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
+SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')   # <-- correct
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
@@ -265,7 +265,6 @@ class Setting(db.Model):
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=False)
 
-# ---------- NEW: Announcement Model ----------
 class Announcement(db.Model):
     __tablename__ = 'announcement'
     id = db.Column(db.Integer, primary_key=True)
@@ -506,7 +505,6 @@ def handle_csrf_error(e):
 # ---------- Routes ----------
 @app.route('/')
 def index():
-    # Get active announcements for all users
     announcements = Announcement.query.filter_by(is_active=True).filter(
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
@@ -799,8 +797,6 @@ def manage_contributors(token):
 @app.route('/events/<token>/contributor/add', methods=['POST'])
 @admin_login_required
 def add_contributor(token):
-    # This route is kept for backward compatibility but not used anymore.
-    # We can leave it as is – no form calls it.
     flash('Contributors must register themselves via the event link.', 'info')
     return redirect(url_for('manage_contributors', token=token))
 
@@ -1040,7 +1036,6 @@ def contact():
         )
         db.session.add(msg)
         db.session.commit()
-        # Notify all super admins
         super_admins = Admin.query.filter_by(is_super_admin=True).all()
         for sa in super_admins:
             create_notification(sa.id, f"New contact message from {msg.name}: {msg.subject}", 'contact')
@@ -1256,7 +1251,6 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
-# ---------- AI Chat API (with CSRF exempt) ----------
 @app.route('/api/chat', methods=['POST'])
 @csrf.exempt
 @admin_login_required
@@ -1451,7 +1445,6 @@ if __name__ == '__main__':
         ]:
             if not Setting.query.filter_by(key=key).first():
                 db.session.add(Setting(key=key, value=default))
-        # Create an initial announcement if none exists
         if Announcement.query.count() == 0:
             ann = Announcement(
                 title="Welcome to GoldenVow!",
