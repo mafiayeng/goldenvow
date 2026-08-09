@@ -1,108 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Contributors – {{ event.title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="golden-text">👥 Contributors</h2>
-    <span class="badge bg-gold text-dark">{{ event.title }}</span>
-</div>
-<p class="text-muted-light">Total Raised: <strong class="golden-text">KES {{ get_event_total_contributions(event.id)|round(2) }}</strong></p>
+<h2>Contributors for "{{ event.title }}"</h2>
+<a href="{{ url_for('dashboard') }}" class="btn btn-glass mb-3">← Back to Dashboard</a>
+<hr>
 
-<!-- Add Contributor -->
-<div class="glass-card p-3 mb-4">
-    <h5 class="golden-text">➕ Add New Contributor</h5>
-    <form method="POST" action="{{ url_for('add_contributor', token=event.token) }}" class="row g-2">
-        <div class="col-md-3"><input type="text" name="name" placeholder="Full Name" class="form-control bg-dark text-light" required></div>
-        <div class="col-md-3"><input type="tel" name="phone" placeholder="Phone" class="form-control bg-dark text-light" required></div>
-        <div class="col-md-3"><input type="number" name="pledge_amount" placeholder="Amount (KES)" class="form-control bg-dark text-light" step="0.01" required></div>
-        <div class="col-md-3"><button type="submit" class="btn btn-gold w-100">Add</button></div>
-    </form>
+<!-- Show the shareable link -->
+<div class="glass p-3 mb-4">
+    <p><strong>Share this event with contributors:</strong></p>
+    <div class="d-flex gap-2">
+        <input type="text" id="shareLink" class="form-control" value="{{ url_for('event_landing', token=event.token, _external=True) }}" readonly>
+        <button class="btn btn-gold" onclick="copyLink()"><i class="fas fa-copy"></i> Copy</button>
+    </div>
+    <small class="text-muted">Contributors can register/login via this link and submit their pledges.</small>
 </div>
 
-<!-- Contributors List -->
-<div class="table-responsive">
-    <table class="table table-dark table-hover">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Pledge</th>
-                <th>Paid</th>
-                <th>Fee</th>
-                <th>Status</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for c in contributors.items %}
-        <tr>
-            <td>
-                {{ c.name }}
-                {% if c.username %}
-                <span class="badge bg-info text-dark">👤 {{ c.username }}</span>
-                {% endif %}
-            </td>
-            <td>{{ c.phone }}</td>
-            <td>KES {{ c.pledge_amount|round(2) }}</td>
-            <td>KES {{ c.paid_amount|round(2) }}</td>
-            <td>KES {{ c.fee_amount|round(2) }}</td>
-            <td>
-                <span class="badge bg-{{ 'success' if c.status == 'approved' else 'warning' if c.status == 'pending' else 'danger' }}">
-                    {{ c.status|title }}
-                </span>
-                {% if c.auto_verified %}
-                <span class="badge bg-success">🤖 System Verified</span>
-                {% endif %}
-                {% if c.status == 'pending' and c.sender_name %}
-                    {% if c.sender_name.lower().strip() == event.account_name.lower().strip() %}
-                    <span class="badge bg-success">✅ Name Match</span>
-                    {% else %}
-                    <span class="badge bg-danger">❌ Name Mismatch</span>
-                    {% endif %}
-                {% endif %}
-            </td>
-            <td>
-                {% if c.payment_proof_screenshot %}
-                <a href="{{ url_for('static', filename=c.payment_proof_screenshot.replace('static/', '')) }}" target="_blank" class="btn btn-sm btn-outline-info">
-                    <i class="bi bi-image"></i> View Proof
-                </a>
-                {% endif %}
-                
-                {% if c.status == 'pending' %}
-                <form method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" class="d-inline">
-                    <input type="number" name="received_amount" placeholder="Amount received" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;" step="0.01" required>
-                    <button type="submit" class="btn btn-sm btn-success">✅ Approve</button>
+<hr>
+<h4>Registered Contributors</h4>
+<table class="table text-light">
+    <thead>
+        <tr><th>Name</th><th>Phone</th><th>Pledge</th><th>Paid</th><th>Status</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for c in contributors.items %}
+    <tr>
+        <td>{{ c.name }}</td>
+        <td>{{ c.phone }}</td>
+        <td>KES {{ c.pledge_amount|round(2) }}</td>
+        <td>KES {{ c.paid_amount|round(2) }}</td>
+        <td>{{ c.status|title }}</td>
+        <td>
+            {% if c.status == 'pending' %}
+                <form method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" style="display:inline;">
+                    {{ csrf_token() }}
+                    <input type="number" step="0.01" name="received_amount" placeholder="Received" required>
+                    <button type="submit" class="btn btn-sm btn-gold">Approve</button>
                 </form>
-                
-                <form method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" class="d-inline">
-                    <input type="text" name="reason" placeholder="Reason" class="form-control form-control-sm bg-dark text-light d-inline" style="width:100px;">
-                    <button type="submit" class="btn btn-sm btn-danger">❌ Decline</button>
+                <form method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" style="display:inline;">
+                    {{ csrf_token() }}
+                    <input type="text" name="reason" placeholder="Reason" required>
+                    <button type="submit" class="btn btn-sm btn-danger">Decline</button>
                 </form>
-                {% endif %}
-                
-                <a href="{{ url_for('contributor_view', token=c.token) }}" class="btn btn-sm btn-outline-info">View</a>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
+            {% else %}
+                <span class="badge bg-secondary">Processed</span>
+            {% endif %}
+            <a href="{{ url_for('contributor_view', token=c.token) }}" class="btn btn-sm btn-glass">View</a>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{{ contributors.links }}
 
-<!-- Pagination -->
-{% if contributors.pages > 1 %}
-<nav>
-    <ul class="pagination justify-content-center">
-        {% if contributors.has_prev %}
-        <li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ contributors.prev_num }}">Previous</a></li>
-        {% endif %}
-        <li class="page-item active"><span class="page-link bg-gold text-dark border-0">{{ contributors.page }}</span></li>
-        {% if contributors.has_next %}
-        <li class="page-item"><a class="page-link bg-dark text-light border-0" href="?page={{ contributors.next_num }}">Next</a></li>
-        {% endif %}
-    </ul>
-</nav>
-{% endif %}
-
-<div class="mt-3 text-center">
-    <a href="{{ url_for('dashboard') }}" class="text-muted-light">← Back to Dashboard</a>
-</div>
+<script>
+    function copyLink() {
+        const link = document.getElementById('shareLink');
+        link.select();
+        navigator.clipboard.writeText(link.value).then(() => {
+            alert('Link copied to clipboard!');
+        });
+    }
+</script>
 {% endblock %}
