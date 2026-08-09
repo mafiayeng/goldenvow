@@ -707,13 +707,21 @@ def dashboard():
     admin = Admin.query.get(session['admin_id'])
     if admin.is_super_admin:
         return redirect(url_for('super_dashboard'))
+    
     page = request.args.get('page', 1, type=int)
-    events = Event.query.filter_by(admin_id=admin.id).order_by(desc(Event.created_at)).paginate(page=page, per_page=10)
+    search = request.args.get('search', '').strip()
+    
+    query = Event.query.filter_by(admin_id=admin.id)
+    if search:
+        query = query.filter(Event.title.ilike(f'%{search}%'))
+    
+    events = query.order_by(desc(Event.created_at)).paginate(page=page, per_page=10)
     total_raised = sum(get_event_total_contributions(e.id) for e in events.items)
     pending_count = Contributor.query.filter_by(status=STATUS_PENDING).join(Event).filter(Event.admin_id == admin.id).count()
     announcements = Announcement.query.filter_by(is_active=True).filter(
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
+    
     return render_template('dashboard.html', admin=admin, events=events,
                             total_raised=total_raised, pending_contributions=pending_count,
                             announcements=announcements)
@@ -1520,9 +1528,9 @@ def chat():
                 return escalate_to_support_in_app(user_message)
             if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
                 return f"📊 You currently have **{total_events}** events."
-            if 'raised' in msg or 'total raised' in msg or 'collected' in msg):
+            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:   # <-- FIXED
                 return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
-            if 'pending' in msg or 'approval' in msg):
+            if 'pending' in msg or 'approval' in msg:
                 return f"⏳ There are **{pending_contributions}** pending contribution approvals."
             if 'fee' in msg or 'fees' in msg:
                 return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
