@@ -5,28 +5,53 @@
     <div class="col-md-6">
         <div class="glass p-4 p-md-5">
             <h2 class="text-center mb-4"><i class="fas fa-user-plus text-gold me-2"></i>Contributor Registration</h2>
+            
             <form method="POST">
                 {{ form.csrf_token }}
                 <input type="hidden" name="event_token" value="{{ event_token }}">
+                
                 <div class="mb-3">
                     {{ form.username.label(class="form-label") }}
-                    {{ form.username(class="form-control", placeholder="Choose username") }}
+                    {{ form.username(class="form-control", placeholder="Choose a username") }}
+                    <small class="text-muted">Letters, numbers, and underscores only.</small>
                 </div>
+                
                 <div class="mb-3">
                     {{ form.password.label(class="form-label") }}
-                    {{ form.password(class="form-control", placeholder="Min 6 characters") }}
+                    {{ form.password(class="form-control", placeholder="Min 8 characters") }}
+                    <small class="text-muted">Must contain at least one number and one special character.</small>
                 </div>
+                
                 <div class="mb-3">
                     {{ form.name.label(class="form-label") }}
-                    {{ form.name(class="form-control", placeholder="Full name") }}
+                    {{ form.name(class="form-control", placeholder="Your full name") }}
                 </div>
+                
                 <div class="mb-3">
                     {{ form.phone.label(class="form-label") }}
-                    {{ form.phone(class="form-control", placeholder="Phone number") }}
+                    {{ form.phone(class="form-control", placeholder="2547XX XXX XXX") }}
                 </div>
-                <button type="submit" class="btn btn-gold w-100"><i class="fas fa-user-check me-2"></i>Register</button>
+                
+                <button type="submit" class="btn btn-gold w-100">
+                    <i class="fas fa-user-check me-2"></i>Register
+                </button>
             </form>
-            <p class="mt-3 text-center">Already registered? <a href="{{ url_for('contributor_login', event_token=event_token) }}" class="text-gold">Login</a></p>
+            
+            <div class="text-center mt-3">
+                <p>
+                    Already registered? 
+                    <a href="{{ url_for('contributor_login', event_token=event_token) }}" class="text-gold">
+                        Login here
+                    </a>
+                </p>
+                {% if event_token %}
+                    <p>
+                        <a href="{{ url_for('event_landing', token=event_token) }}" class="btn btn-glass btn-sm">
+                            <i class="fas fa-arrow-left me-1"></i>Back to Event
+                        </a>
+                    </p>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
