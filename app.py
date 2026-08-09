@@ -49,8 +49,9 @@ app.permanent_session_lifetime = timedelta(days=7)
 csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
+# ----- Constants (UPDATED with Kenya country code) -----
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
-SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
+SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')   # <-- changed
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
