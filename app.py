@@ -641,16 +641,113 @@ def super_dashboard():
     admin = Admin.query.get(session['admin_id'])
     total_events = Event.query.count()
     total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
-    total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
+    total_fees = get_global_total_fees()
     pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
     admins = Admin.query.all()
     announcements = Announcement.query.filter_by(is_active=True).filter(
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
-    return render_template('super_dashboard.html', admin=admin, total_events=total_events,
-                            total_contributions=total_contributions, total_fees=total_fees,
-                            pending_withdrawals=pending_withdrawals, admins=admins,
-                            announcements=announcements)
+    
+    # Completed events (target reached)
+    all_events = Event.query.filter_by(is_active=True).all()
+    completed_events = []
+    for event in all_events:
+        raised = get_event_total_contributions(event.id)
+        if raised >= event.target_amount and event.target_amount > 0:
+            completed_events.append({
+                'event': event,
+                'raised': raised,
+                'fee': get_event_total_fee(event.id)
+            })
+    
+    return render_template('super_dashboard.html', 
+                            admin=admin, 
+                            total_events=total_events,
+                            total_contributions=total_contributions, 
+                            total_fees=total_fees,
+                            pending_withdrawals=pending_withdrawals, 
+                            admins=admins,
+                            announcements=announcements,
+                            completed_events=completed_events)
+
+@app.route('/super/completed-events')
+@admin_login_required
+@super_admin_required
+def completed_events():
+    all_events = Event.query.filter_by(is_active=True).all()
+    completed_events = []
+    for event in all_events:
+        raised = get_event_total_contributions(event.id)
+        if raised >= event.target_amount and event.target_amount > 0:
+            completed_events.append({
+                'event': event,
+                'raised': raised,
+                'fee': get_event_total_fee(event.id),
+                'admin': event.admin
+            })
+    return render_template('completed_events.html', completed_events=completed_events)
+
+@app.route('/super/request-payment/<int:event_id>', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def request_payment_from_admin(event_id):
+    event = Event.query.get_or_404(event_id)
+    admin = event.admin
+    
+    if not admin:
+        flash('Event has no admin assigned.', 'error')
+        return redirect(url_for('completed_events'))
+    
+    # Send in-app notification only (no email)
+    create_notification(
+        admin.id,
+        f"💰 Super admin is requesting payment details for your event '{event.title}'. Please reply with your payment method (M-Pesa, Bank, etc.) via Contact page.",
+        'payment_request'
+    )
+    
+    flash(f'✅ Payment request sent to {admin.username} via in-app notification.', 'success')
+    return redirect(url_for('completed_events'))
+
+@app.route('/super/withdraw-request', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def super_withdraw_request():
+    try:
+        amount = float(request.form.get('amount', 0))
+        phone = request.form.get('phone', '').strip()
+    except ValueError:
+        amount = 0
+    
+    if amount < MINIMUM_WITHDRAWAL_FEE:
+        flash(f'Minimum withdrawal is KES {MINIMUM_WITHDRAWAL_FEE}.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    total_fees = get_global_total_fees()
+    if amount > total_fees:
+        flash(f'Insufficient fees available. Total fees: KES {total_fees:,.2f}', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    wd = Withdrawal(
+        admin_id=session['admin_id'],
+        amount=amount,
+        phone=phone,
+        method='mpesa',
+        status='pending'
+    )
+    db.session.add(wd)
+    db.session.commit()
+    
+    # Notify all super admins
+    super_admins = Admin.query.filter_by(is_super_admin=True).all()
+    for sa in super_admins:
+        create_notification(
+            sa.id,
+            f"💰 New withdrawal request from {sa.username}: KES {amount:,.2f}",
+            'withdrawal'
+        )
+    
+    flash(f'Withdrawal request of KES {amount:,.2f} submitted.', 'success')
+    return redirect(url_for('super_dashboard'))
 
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
@@ -1109,7 +1206,6 @@ def mark_contact_read(mid):
     flash('Marked as read.', 'success')
     return redirect(url_for('contact_messages'))
 
-# ---------- UPDATED: forward contact uses in-app notification ----------
 @app.route('/forward-contact/<int:mid>', methods=['POST'])
 @admin_login_required
 @super_admin_required
@@ -1123,7 +1219,6 @@ def forward_contact(mid):
     if not admin or not admin.is_active:
         flash('Selected admin is invalid or inactive.', 'error')
         return redirect(url_for('contact_messages'))
-    # Send in-app notification instead of email
     create_notification(
         admin.id,
         f"📨 Super admin forwarded a contact message from {msg.name} (Subject: {msg.subject}). Check contact messages for details.",
@@ -1208,46 +1303,6 @@ def withdrawals():
     wd_list = Withdrawal.query.order_by(desc(Withdrawal.created_at)).all()
     return render_template('withdrawals.html', withdrawals=wd_list)
 
-@app.route('/withdrawal/request', methods=['GET', 'POST'])
-@admin_login_required
-@super_admin_required
-def withdrawal_request():
-    if request.method == 'GET':
-        return render_template('request_withdrawal.html')
-    try:
-        amount = float(request.form.get('amount', 0))
-        phone = request.form.get('phone', '').strip()
-    except ValueError:
-        amount = 0
-    if amount < MINIMUM_WITHDRAWAL_FEE:
-        flash(f'Minimum withdrawal is KES {MINIMUM_WITHDRAWAL_FEE}.', 'error')
-        return redirect(url_for('super_dashboard'))
-    total_fees = get_global_total_fees()
-    if amount > total_fees:
-        flash('Insufficient fees available.', 'error')
-        return redirect(url_for('super_dashboard'))
-    wd = Withdrawal(admin_id=session['admin_id'], amount=amount, phone=phone, method='mpesa', status=STATUS_PENDING)
-    db.session.add(wd)
-    db.session.commit()
-    flash('Withdrawal request submitted.', 'success')
-    return redirect(url_for('super_dashboard'))
-
-@app.route('/withdrawal/<int:wid>/update', methods=['POST'])
-@admin_login_required
-@super_admin_required
-def update_withdrawal(wid):
-    wd = Withdrawal.query.get_or_404(wid)
-    status = request.form.get('status')
-    if status in [STATUS_PAID, STATUS_FAILED, STATUS_CANCELLED]:
-        wd.status = status
-        if status == STATUS_PAID:
-            wd.paid_at = datetime.utcnow()
-        db.session.commit()
-        flash('Withdrawal updated.', 'success')
-    else:
-        flash('Invalid status.', 'error')
-    return redirect(url_for('withdrawals'))
-
 @app.route('/help')
 def help_page():
     return render_template('help.html')
@@ -1322,7 +1377,6 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
-# ---------- UPDATED: AI chat uses in-app notifications ----------
 @app.route('/api/chat', methods=['POST'])
 @csrf.exempt
 @admin_login_required
@@ -1346,7 +1400,6 @@ def chat():
         recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
 
         def escalate_to_support_in_app(question):
-            # Send notification to ALL super admins
             super_admins_list = Admin.query.filter_by(is_super_admin=True).all()
             for sa in super_admins_list:
                 create_notification(
@@ -1509,7 +1562,6 @@ scheduler.start()
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Add missing columns (for SQLite)
         try:
             db.engine.execute('ALTER TABLE event ADD COLUMN lock_message TEXT')
         except Exception as e:
