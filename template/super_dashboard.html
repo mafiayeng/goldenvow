@@ -1,60 +1,71 @@
 {% extends "base.html" %}
 {% block title %}Super Admin Dashboard{% endblock %}
 {% block content %}
-<div class="row g-4">
-    <div class="col-md-3">
+<div class="glass p-4 mb-4" style="background: rgba(212, 175, 55, 0.05); border-color: rgba(212, 175, 55, 0.2);">
+    <h2 class="mb-2">Super Admin Panel</h2>
+    <p style="color: var(--text-muted);">Oversee all events, manage admins, and control platform settings.</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
-            <h3>{{ total_events }}</h3>
-            <p>Total Events</p>
+            <h3 class="text-gold">{{ total_events }}</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Total Events</p>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
-            <h3>KES {{ total_contributions|round(2) }}</h3>
-            <p>Total Contributions</p>
+            <h3 class="text-gold">KES {{ total_contributions|round(2) }}</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Total Raised</p>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
-            <h3>KES {{ total_fees|round(2) }}</h3>
-            <p>Total Fees Collected</p>
+            <h3 class="text-gold">KES {{ total_fees|round(2) }}</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Fees Collected</p>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
-            <h3>{{ pending_withdrawals }}</h3>
-            <p>Pending Withdrawals</p>
+            <h3 class="text-gold">{{ pending_withdrawals }}</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Pending Withdrawals</p>
         </div>
     </div>
 </div>
-<div class="row mt-4">
+
+<div class="row g-3">
     <div class="col-md-6">
-        <div class="glass p-4">
+        <div class="glass p-4 h-100">
             <h4><i class="fas fa-hand-holding-usd text-gold me-2"></i>Withdrawals</h4>
+            <p style="color: var(--text-muted);">Manage fee withdrawals from the platform.</p>
             <a href="{{ url_for('withdrawal_request') }}" class="btn btn-gold">Request Withdrawal</a>
             <a href="{{ url_for('withdrawals') }}" class="btn btn-glass">View All</a>
         </div>
     </div>
     <div class="col-md-6">
-        <div class="glass p-4">
+        <div class="glass p-4 h-100">
             <h4><i class="fas fa-users-cog text-gold me-2"></i>Admins</h4>
+            <p style="color: var(--text-muted);">Add, remove, or change admin permissions.</p>
             <a href="{{ url_for('manage_admins') }}" class="btn btn-glass">Manage Admins</a>
             <a href="{{ url_for('settings') }}" class="btn btn-glass">Settings</a>
         </div>
     </div>
 </div>
-<hr class="my-4">
-<h4>All Admins</h4>
+
+<hr class="my-4" style="border-color: var(--glass-border);">
+<h4 class="mb-3"><i class="fas fa-list text-gold me-2"></i>All Admins</h4>
 <div class="table-responsive">
-    <table class="table text-light">
-        <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th>Super Admin</th><th>Active</th></tr></thead>
+    <table class="table" style="color: var(--text-color);">
+        <thead>
+            <tr><th>Username</th><th>Email</th><th>Phone</th><th>Super Admin</th><th>Active</th></tr>
+        </thead>
         <tbody>
             {% for a in admins %}
             <tr>
                 <td>{{ a.username }}</td>
                 <td>{{ a.email }}</td>
                 <td>{{ a.phone }}</td>
-                <td>{{ 'Yes' if a.is_super_admin else 'No' }}</td>
+                <td>{{ '✅' if a.is_super_admin else '❌' }}</td>
                 <td>{{ '✅' if a.is_active else '❌' }}</td>
             </tr>
             {% endfor %}
