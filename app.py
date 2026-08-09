@@ -1109,6 +1109,7 @@ def mark_contact_read(mid):
     flash('Marked as read.', 'success')
     return redirect(url_for('contact_messages'))
 
+# ---------- UPDATED: forward contact uses in-app notification ----------
 @app.route('/forward-contact/<int:mid>', methods=['POST'])
 @admin_login_required
 @super_admin_required
@@ -1122,20 +1123,13 @@ def forward_contact(mid):
     if not admin or not admin.is_active:
         flash('Selected admin is invalid or inactive.', 'error')
         return redirect(url_for('contact_messages'))
-    subject = f"Forwarded Contact Message: {msg.subject}"
-    body = f"""
-You have received a forwarded contact message from the super admin.
-
-Original sender: {msg.name} <{msg.email}>
-Phone: {msg.phone}
-Subject: {msg.subject}
-Message:
-{msg.message}
-
-Please respond to the original sender directly if needed.
-    """
-    send_email(admin.email, subject, body)
-    flash(f'Message forwarded to {admin.username}.', 'success')
+    # Send in-app notification instead of email
+    create_notification(
+        admin.id,
+        f"📨 Super admin forwarded a contact message from {msg.name} (Subject: {msg.subject}). Check contact messages for details.",
+        'contact'
+    )
+    flash(f'Message forwarded to {admin.username} via in-app notification.', 'success')
     return redirect(url_for('contact_messages'))
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -1328,6 +1322,7 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
+# ---------- UPDATED: AI chat uses in-app notifications ----------
 @app.route('/api/chat', methods=['POST'])
 @csrf.exempt
 @admin_login_required
@@ -1340,7 +1335,6 @@ def chat():
 
         admin = Admin.query.get(session['admin_id'])
         admin_name = admin.username if admin else "Unknown"
-        admin_email = admin.email if admin else "no-email@example.com"
 
         total_events = Event.query.count()
         total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
@@ -1351,20 +1345,20 @@ def chat():
         recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
         recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
 
-        def escalate_to_support(question):
-            subject = f"AI Assistant Support Request from {admin_name}"
-            body = f"""
-Admin: {admin_name}
-Email: {admin_email}
-Question:
-{question}
-            """
-            send_email(SUPPORT_EMAIL, subject, body)
-            return "📧 Your question has been forwarded to our support team. They will get back to you shortly."
+        def escalate_to_support_in_app(question):
+            # Send notification to ALL super admins
+            super_admins_list = Admin.query.filter_by(is_super_admin=True).all()
+            for sa in super_admins_list:
+                create_notification(
+                    sa.id,
+                    f"🤖 AI support request from {admin_name}: {question[:100]}{'...' if len(question) > 100 else ''}",
+                    'support'
+                )
+            return "✅ Your question has been sent to the support team via in-app notifications. Check your bell icon for updates."
 
         def respond(msg):
             if any(word in msg for word in ['human', 'agent', 'support', 'talk to', 'contact support']):
-                return escalate_to_support(user_message)
+                return escalate_to_support_in_app(user_message)
             if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
                 return f"📊 You currently have **{total_events}** events."
             if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
@@ -1391,7 +1385,7 @@ Question:
 For more, visit the Help page."""
             if 'hello' in msg or 'hi' in msg or 'hey' in msg:
                 return "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."
-            return escalate_to_support(user_message)
+            return escalate_to_support_in_app(user_message)
 
         response = respond(user_message)
         return jsonify({'response': response})
