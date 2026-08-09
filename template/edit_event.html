@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Edit Event{% endblock %}
+{% block head %}
+<style>
+    .payment-field { display: none; }
+    .payment-field.show { display: block; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-8">
@@ -7,19 +13,143 @@
             <h2 class="mb-4"><i class="fas fa-edit text-gold me-2"></i>Edit Event</h2>
             <form method="POST">
                 {{ form.csrf_token }}
-                <!-- All existing fields ... -->
-                {{ form.event_type.label(class="form-label") }}
-                {{ form.event_type(class="form-select") }}
-                ...
-                <!-- NEW: Lock Message field -->
+
+                <div class="mb-3">
+                    {{ form.event_type.label(class="form-label") }}
+                    {{ form.event_type(class="form-select") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.title.label(class="form-label") }}
+                    {{ form.title(class="form-control", placeholder="e.g. John & Mary Wedding") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control", rows=3) }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.target_amount.label(class="form-label") }}
+                        {{ form.target_amount(class="form-control", placeholder="0.00") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.deadline.label(class="form-label") }}
+                        {{ form.deadline(class="form-control", type="datetime-local") }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ form.event_date.label(class="form-label") }}
+                    {{ form.event_date(class="form-control", type="datetime-local") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.picture_url.label(class="form-label") }}
+                    {{ form.picture_url(class="form-control", placeholder="https://...") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.background_image_url.label(class="form-label") }}
+                    {{ form.background_image_url(class="form-control", placeholder="https://...") }}
+                </div>
+
+                <hr class="my-4" style="border-color: rgba(255,255,255,0.1);">
+
+                <!-- Payment Method Dropdown (same as create) -->
+                <div class="mb-3">
+                    <label class="form-label">Payment Method</label>
+                    <select id="payment-method" class="form-select">
+                        <option value="">Select payment method...</option>
+                        <option value="bank">Bank Transfer</option>
+                        <option value="mpesa">M-Pesa Send Money</option>
+                        <option value="paybill">Paybill</option>
+                        <option value="till">Till Number</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    {{ form.account_name.label(class="form-label") }}
+                    {{ form.account_name(class="form-control", placeholder="Your name or company") }}
+                </div>
+
+                <div id="bank-fields" class="payment-field">
+                    <div class="mb-3">
+                        {{ form.bank_name.label(class="form-label") }}
+                        {{ form.bank_name(class="form-control", placeholder="Bank name") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.bank_account_name.label(class="form-label") }}
+                        {{ form.bank_account_name(class="form-control", placeholder="Account holder name") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.bank_account_number.label(class="form-label") }}
+                        {{ form.bank_account_number(class="form-control", placeholder="Account number") }}
+                    </div>
+                </div>
+
+                <div id="mpesa-fields" class="payment-field">
+                    <div class="mb-3">
+                        {{ form.mpesa_number.label(class="form-label") }}
+                        {{ form.mpesa_number(class="form-control", placeholder="07XX XXX XXX") }}
+                    </div>
+                </div>
+
+                <div id="paybill-fields" class="payment-field">
+                    <div class="mb-3">
+                        {{ form.paybill.label(class="form-label") }}
+                        {{ form.paybill(class="form-control", placeholder="Paybill number") }}
+                    </div>
+                </div>
+
+                <div id="till-fields" class="payment-field">
+                    <div class="mb-3">
+                        {{ form.till_number.label(class="form-label") }}
+                        {{ form.till_number(class="form-control", placeholder="Till number") }}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    {{ form.payment_instructions.label(class="form-label") }}
+                    {{ form.payment_instructions(class="form-control", rows=2) }}
+                </div>
+                <div class="mb-3">
+                    {{ form.whatsapp_contact.label(class="form-label") }}
+                    {{ form.whatsapp_contact(class="form-control", placeholder="07XX XXX XXX") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.grace_period.label(class="form-label") }}
+                    {{ form.grace_period(class="form-control", placeholder="0 for no grace period") }}
+                </div>
+
+                <!-- ✅ NEW: Lock Message -->
                 <div class="mb-3">
                     {{ form.lock_message.label(class="form-label") }}
                     {{ form.lock_message(class="form-control", rows=3, placeholder="Optional – shown when event page is locked") }}
                     <small class="text-muted">Leave blank to use the default lock message.</small>
                 </div>
-                <button type="submit" class="btn btn-gold w-100">Update Event</button>
+
+                <button type="submit" class="btn btn-gold w-100"><i class="fas fa-save me-2"></i>Update Event</button>
             </form>
         </div>
     </div>
 </div>
+<script>
+    // Same toggle script as in create_event
+    document.addEventListener('DOMContentLoaded', function() {
+        const paymentMethod = document.getElementById('payment-method');
+        const bankFields = document.getElementById('bank-fields');
+        const mpesaFields = document.getElementById('mpesa-fields');
+        const paybillFields = document.getElementById('paybill-fields');
+        const tillFields = document.getElementById('till-fields');
+        function toggleFields() {
+            bankFields.classList.remove('show');
+            mpesaFields.classList.remove('show');
+            paybillFields.classList.remove('show');
+            tillFields.classList.remove('show');
+            const val = paymentMethod.value;
+            if (val === 'bank') bankFields.classList.add('show');
+            else if (val === 'mpesa') mpesaFields.classList.add('show');
+            else if (val === 'paybill') paybillFields.classList.add('show');
+            else if (val === 'till') tillFields.classList.add('show');
+        }
+        paymentMethod.addEventListener('change', toggleFields);
+        toggleFields();
+    });
+</script>
 {% endblock %}
