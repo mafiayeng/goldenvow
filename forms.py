@@ -36,6 +36,7 @@ class EventForm(FlaskForm):
     payment_instructions = TextAreaField('Payment Instructions', validators=[Optional()])
     whatsapp_contact = StringField('WhatsApp Contact', validators=[Optional(), Length(max=20)])
     grace_period = FloatField('Grace Period (hours)', validators=[Optional(), NumberRange(min=0)])
+    lock_message = TextAreaField('Lock Message (shown when page is locked)', validators=[Optional()])
 
 class ContributorLoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
