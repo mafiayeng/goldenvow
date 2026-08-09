@@ -3,32 +3,32 @@
 {% block content %}
 <div class="glass p-4 mb-4" style="background: rgba(212, 175, 55, 0.05); border-color: rgba(212, 175, 55, 0.2);">
     <h2 class="mb-2">Welcome, {{ admin.username }}! 👋</h2>
-    <p style="color: rgba(255,255,255,0.7);">Ready to make a difference? Let's get started with your fundraising journey.</p>
+    <p style="color: var(--text-muted);">Manage your events, track contributions, and grow your community.</p>
 </div>
 
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
             <h3 class="text-gold">{{ events.total }}</h3>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Events</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Events</p>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
             <h3 class="text-gold">KES {{ total_raised|round(2) }}</h3>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Total Raised</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Total Raised</p>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
             <h3 class="text-gold">{{ pending_contributions }}</h3>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Pending Approvals</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Pending Approvals</p>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="glass p-3 text-center">
             <h3 class="text-gold">{{ admin.referral_count }}</h3>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Referrals</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Referrals</p>
         </div>
     </div>
 </div>
@@ -36,8 +36,8 @@
 {% if events.total == 0 %}
 <div class="glass p-5 text-center mb-4" style="background: linear-gradient(135deg, rgba(212, 175, 55, 0.05), rgba(212, 175, 55, 0.02)); border: 2px solid rgba(212, 175, 55, 0.15);">
     <i class="fas fa-rocket text-gold fa-3x mb-3"></i>
-    <h3 style="color: #fff;">Launch Your First Event</h3>
-    <p style="color: rgba(255,255,255,0.7); max-width: 500px; margin: 0 auto 1.5rem;">
+    <h3 style="color: var(--text-color);">Launch Your First Event</h3>
+    <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 1.5rem;">
         Create a fundraising campaign in minutes. Collect contributions, track payments, and make a difference.
     </p>
     <a href="{{ url_for('create_event') }}" class="btn btn-gold btn-lg px-5">
@@ -49,21 +49,21 @@
         <div class="glass p-3 h-100">
             <i class="fas fa-user-circle text-gold fa-2x mb-2"></i>
             <h6>Account Name</h6>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Set the exact name contributors will see.</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Set the exact name contributors will see.</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="glass p-3 h-100">
             <i class="fas fa-check-circle text-gold fa-2x mb-2"></i>
             <h6>Payment Proof</h6>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Review and click Approve to confirm contributions.</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Review and click Approve to confirm contributions.</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="glass p-3 h-100">
             <i class="fas fa-lock text-gold fa-2x mb-2"></i>
             <h6>Event Locking</h6>
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">Fees ≥ KES 50 lock the page after 3 days.</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Fees ≥ KES 50 lock the page after 3 days.</p>
         </div>
     </div>
 </div>
@@ -74,11 +74,11 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap">
         <div>
             <h5>{{ event.title }}</h5>
-            <p class="mb-0" style="color: rgba(255,255,255,0.6);">
+            <p class="mb-0" style="color: var(--text-muted);">
                 Raised: <span class="text-gold">KES {{ get_event_total_contributions(event.id)|round(2) }}</span> 
                 / Target: KES {{ event.target_amount|round(2) }}
             </p>
-            <small style="color: rgba(255,255,255,0.4);">Created: {{ event.created_at.strftime('%Y-%m-%d') }}</small>
+            <small style="color: var(--text-muted); opacity: 0.6;">Created: {{ event.created_at.strftime('%Y-%m-%d') }}</small>
         </div>
         <div class="mt-2 mt-md-0">
             <a href="{{ url_for('manage_contributors', token=event.token) }}" class="btn btn-sm btn-gold me-1">
@@ -95,7 +95,7 @@
 {% endif %}
 
 <div class="mt-4 text-center">
-    <small style="color: rgba(255,255,255,0.3);">
+    <small style="color: var(--text-muted); opacity: 0.5;">
         Need help? <a href="{{ url_for('help_page') }}" class="text-gold">Visit Help</a> 
         or <a href="{{ url_for('contact') }}" class="text-gold">Contact Support</a>
     </small>
