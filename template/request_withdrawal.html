@@ -6,7 +6,7 @@
         <div class="glass p-4 p-md-5">
             <h2 class="text-center mb-4"><i class="fas fa-hand-holding-usd text-gold me-2"></i>Request Withdrawal</h2>
             <form method="POST" action="{{ url_for('withdrawal_request') }}">
-                {{ csrf_token() }}
+                {{ csrf_token() }}   <!-- ✅ CORRECT: with parentheses -->
                 <div class="mb-3">
                     <label class="form-label">Amount (KES)</label>
                     <input type="number" step="0.01" name="amount" class="form-control" placeholder="Min {{ minimum_withdrawal_fee }}" required>
