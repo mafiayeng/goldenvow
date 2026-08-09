@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextAreaField, BooleanField, SelectField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional, ValidationError
+from flask_wtf.file import FileField, FileAllowed
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -24,8 +25,8 @@ class EventForm(FlaskForm):
     target_amount = FloatField('Target Amount (KES)', validators=[DataRequired(), NumberRange(min=1)])
     deadline = DateTimeField('Deadline', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
     event_date = DateTimeField('Event Date', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    picture_url = StringField('Picture URL', validators=[Optional(), Length(max=500)])
-    background_image_url = StringField('Background Image URL', validators=[Optional(), Length(max=500)])
+    picture = FileField('Event Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'gif'], 'Images only!')])
+    background_image = FileField('Background Image', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'gif'], 'Images only!')])
     account_name = StringField('Account Name', validators=[Optional(), Length(max=150)])
     paybill = StringField('Paybill', validators=[Optional(), Length(max=50)])
     mpesa_number = StringField('M-Pesa Number', validators=[Optional(), Length(max=20)])
