@@ -50,7 +50,7 @@ csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
-SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')   # <-- correct
+SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
 SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
@@ -124,6 +124,7 @@ class Event(db.Model):
     last_activity = db.Column(db.DateTime, default=datetime.utcnow)
     dormant_notified = db.Column(db.Boolean, default=False)
     dormant_notified_at = db.Column(db.DateTime, nullable=True)
+    lock_message = db.Column(db.Text, nullable=True)   # NEW: custom lock message
     __table_args__ = (
         Index('idx_event_admin_id', 'admin_id'),
         Index('idx_event_token', 'token'),
@@ -686,7 +687,8 @@ def create_event():
                 whatsapp_contact=form.whatsapp_contact.data,
                 grace_period=int(form.grace_period.data or 0),
                 has_grace_period=bool(form.grace_period.data and form.grace_period.data > 0),
-                last_activity=datetime.utcnow()
+                last_activity=datetime.utcnow(),
+                lock_message=form.lock_message.data if form.lock_message else None
             )
             db.session.add(event)
             db.session.commit()
@@ -703,7 +705,8 @@ def event_landing(token):
     if not event.is_active:
         flash('Event is inactive.', 'error')
         return redirect(url_for('dashboard'))
-    if get_page_lock_status(event):
+    if get_page_lock_status(event) or event.disabled:
+        # If event is disabled, show locked page with custom message
         return render_template('event_locked.html', event=event)
     contributor = None
     if session.get('contributor_id'):
@@ -1049,7 +1052,8 @@ def contact():
 @super_admin_required
 def contact_messages():
     messages = ContactMessage.query.order_by(desc(ContactMessage.created_at)).all()
-    return render_template('contact_messages.html', messages=messages)
+    admins = Admin.query.filter_by(is_active=True).all()
+    return render_template('contact_messages.html', messages=messages, admins=admins)
 
 @app.route('/contact-message/<int:mid>/read', methods=['POST'])
 @admin_login_required
@@ -1059,6 +1063,35 @@ def mark_contact_read(mid):
     msg.is_read = True
     db.session.commit()
     flash('Marked as read.', 'success')
+    return redirect(url_for('contact_messages'))
+
+@app.route('/forward-contact/<int:mid>', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def forward_contact(mid):
+    msg = ContactMessage.query.get_or_404(mid)
+    admin_id = request.form.get('admin_id')
+    if not admin_id:
+        flash('Please select an admin to forward to.', 'error')
+        return redirect(url_for('contact_messages'))
+    admin = Admin.query.get(admin_id)
+    if not admin or not admin.is_active:
+        flash('Selected admin is invalid or inactive.', 'error')
+        return redirect(url_for('contact_messages'))
+    subject = f"Forwarded Contact Message: {msg.subject}"
+    body = f"""
+You have received a forwarded contact message from the super admin.
+
+Original sender: {msg.name} <{msg.email}>
+Phone: {msg.phone}
+Subject: {msg.subject}
+Message:
+{msg.message}
+
+Please respond to the original sender directly if needed.
+    """
+    send_email(admin.email, subject, body)
+    flash(f'Message forwarded to {admin.username}.', 'success')
     return redirect(url_for('contact_messages'))
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -1438,6 +1471,11 @@ scheduler.start()
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        # Add missing columns (SQLite / PostgreSQL safe)
+        try:
+            db.engine.execute('ALTER TABLE event ADD COLUMN lock_message TEXT')
+        except Exception as e:
+            logger.info(f"Column lock_message may already exist: {e}")
         for key, default in [
             ('maintenance_mode', 'False'),
             ('maintenance_message', 'We are currently performing scheduled maintenance.'),
