@@ -31,22 +31,75 @@
         <td>{{ c.status|title }}</td>
         <td>
             {% if c.status == 'pending' %}
-                <form method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" style="display:inline;">
-                    {{ csrf_token() }}
-                    <input type="number" step="0.01" name="received_amount" placeholder="Received" required>
-                    <button type="submit" class="btn btn-sm btn-gold">Approve</button>
-                </form>
-                <form method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" style="display:inline;">
-                    {{ csrf_token() }}
-                    <input type="text" name="reason" placeholder="Reason" required>
-                    <button type="submit" class="btn btn-sm btn-danger">Decline</button>
-                </form>
+                <!-- Approve Button -->
+                <button type="button" class="btn btn-sm btn-gold" data-bs-toggle="modal" data-bs-target="#approveModal{{ c.id }}">
+                    Approve
+                </button>
+                <!-- Decline Button -->
+                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#declineModal{{ c.id }}">
+                    Decline
+                </button>
             {% else %}
                 <span class="badge bg-secondary">Processed</span>
             {% endif %}
             <a href="{{ url_for('contributor_view', token=c.token) }}" class="btn btn-sm btn-glass">View</a>
         </td>
     </tr>
+
+    <!-- Approve Modal -->
+    <div class="modal fade" id="approveModal{{ c.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass">
+                <div class="modal-header">
+                    <h5 class="modal-title">Approve Contribution</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Approve <strong>{{ c.name }}</strong>'s contribution of KES {{ c.pledge_amount|round(2) }}?</p>
+                    <p class="text-muted">The fee will be calculated automatically.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Amount Received</label>
+                        <input type="number" step="0.01" name="received_amount" form="approveForm{{ c.id }}" class="form-control" placeholder="Enter amount" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
+                    <form id="approveForm{{ c.id }}" method="POST" action="{{ url_for('approve_contributor', token=c.token) }}" style="display:inline;">
+                        {{ csrf_token() }}
+                        <input type="hidden" name="received_amount" id="receivedAmount{{ c.id }}">
+                        <button type="submit" class="btn btn-gold">Confirm Approve</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Decline Modal -->
+    <div class="modal fade" id="declineModal{{ c.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass">
+                <div class="modal-header">
+                    <h5 class="modal-title">Decline Contribution</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Decline <strong>{{ c.name }}</strong>'s contribution?</p>
+                    <div class="mb-3">
+                        <label class="form-label">Reason</label>
+                        <input type="text" name="reason" form="declineForm{{ c.id }}" class="form-control" placeholder="Reason for declining">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
+                    <form id="declineForm{{ c.id }}" method="POST" action="{{ url_for('decline_contributor', token=c.token) }}" style="display:inline;">
+                        {{ csrf_token() }}
+                        <input type="hidden" name="reason" id="declineReason{{ c.id }}">
+                        <button type="submit" class="btn btn-danger">Confirm Decline</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endfor %}
     </tbody>
 </table>
