@@ -20,7 +20,7 @@ from sqlalchemy import desc, func, inspect, Index
 from flask_wtf import FlaskForm, CSRFProtect
 from flask_wtf.csrf import CSRFError
 from wtforms import StringField, PasswordField, FloatField, DateTimeField, TextAreaField, BooleanField, SelectField
-from wtforms.validators import DataRequired, Email, Length, NumberRange, ValidationError, Optional
+from wtforms.validators import DataRequired, Email, Length, NumberRange, ValidationError, Optional, Regexp
 from flask_wtf.file import FileField, FileAllowed
 import bcrypt
 from reportlab.pdfgen import canvas
@@ -86,6 +86,8 @@ class Admin(db.Model):
     referral_count = db.Column(db.Integer, default=0)
     bonus_earned = db.Column(db.Float, default=0.0)
     last_login = db.Column(db.DateTime, nullable=True)
+    login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
     __table_args__ = (Index('idx_admin_username', 'username'), Index('idx_admin_email', 'email'),)
 
 class Event(db.Model):
@@ -158,6 +160,8 @@ class Contributor(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
     __table_args__ = (
         Index('idx_contributor_event_id', 'event_id'),
         Index('idx_contributor_status', 'status'),
@@ -261,6 +265,26 @@ class PasswordReset(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (Index('idx_reset_token', 'token'), Index('idx_reset_expires', 'expires_at'),)
 
+class PasswordResetCode(db.Model):
+    __tablename__ = 'password_reset_code'
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('admin.id', ondelete='CASCADE'))
+    code = db.Column(db.String(6), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (Index('idx_reset_code', 'code'), Index('idx_reset_code_expires', 'expires_at'),)
+
+class ContributorPasswordResetCode(db.Model):
+    __tablename__ = 'contributor_password_reset_code'
+    id = db.Column(db.Integer, primary_key=True)
+    contributor_id = db.Column(db.Integer, db.ForeignKey('contributor.id', ondelete='CASCADE'))
+    code = db.Column(db.String(6), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (Index('idx_contributor_reset_code', 'code'), Index('idx_contributor_reset_code_expires', 'expires_at'),)
+
 class Setting(db.Model):
     __tablename__ = 'setting'
     id = db.Column(db.Integer, primary_key=True)
@@ -275,6 +299,48 @@ class Announcement(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
+
+# ---------- Security Helper Functions ----------
+def is_account_locked_admin(admin):
+    if admin.locked_until and admin.locked_until > datetime.utcnow():
+        return True
+    return False
+
+def reset_login_attempts_admin(admin):
+    admin.login_attempts = 0
+    admin.locked_until = None
+    db.session.commit()
+
+def increment_login_attempts_admin(admin):
+    admin.login_attempts += 1
+    if admin.login_attempts >= 5:
+        admin.locked_until = datetime.utcnow() + timedelta(minutes=15)
+    db.session.commit()
+
+def is_account_locked_contributor(contributor):
+    if contributor.locked_until and contributor.locked_until > datetime.utcnow():
+        return True
+    return False
+
+def reset_login_attempts_contributor(contributor):
+    contributor.login_attempts = 0
+    contributor.locked_until = None
+    db.session.commit()
+
+def increment_login_attempts_contributor(contributor):
+    contributor.login_attempts += 1
+    if contributor.login_attempts >= 5:
+        contributor.locked_until = datetime.utcnow() + timedelta(minutes=15)
+    db.session.commit()
+
+def validate_password_strength(password):
+    if len(password) < 8:
+        return False, 'Password must be at least 8 characters.'
+    if not any(c.isdigit() for c in password):
+        return False, 'Password must contain at least one number.'
+    if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?/~`' for c in password):
+        return False, 'Password must contain at least one special character (!@#$%^&* etc.).'
+    return True, ''
 
 # ---------- Helper Functions ----------
 def send_email(to, subject, body):
@@ -524,8 +590,9 @@ def index():
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        username = form.username.data.strip()
+        username = form.username.data.strip().lower()
         password = form.password.data.strip()
+        
         admin = Admin.query.filter_by(username=username).first()
         if not admin:
             flash('No account found with that username. Please register.', 'error')
@@ -533,9 +600,17 @@ def login():
         if not admin.is_active:
             flash('This account is disabled. Contact support.', 'error')
             return render_template('login.html', form=form)
-        if not check_password(password, admin.password_hash):
-            flash('Incorrect password. Please try again.', 'error')
+        if is_account_locked_admin(admin):
+            remaining = (admin.locked_until - datetime.utcnow()).seconds // 60
+            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
             return render_template('login.html', form=form)
+        if not check_password(password, admin.password_hash):
+            increment_login_attempts_admin(admin)
+            attempts_left = 5 - admin.login_attempts
+            flash(f'Incorrect password. {attempts_left} attempts remaining.', 'error')
+            return render_template('login.html', form=form)
+        
+        reset_login_attempts_admin(admin)
         session.permanent = True
         session['admin_id'] = admin.id
         admin.last_login = datetime.utcnow()
@@ -555,13 +630,18 @@ def login():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        username = form.username.data.strip()
+        username = form.username.data.strip().lower()
         password = form.password.data.strip()
-        email = form.email.data.strip()
+        email = form.email.data.strip().lower()
         phone = form.phone.data.strip()
         super_secret = form.super_secret.data.strip()
         ref_code = form.referral_code.data.strip()
-
+        
+        valid, msg = validate_password_strength(password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('register.html', form=form)
+        
         if Admin.query.filter_by(username=username).first():
             flash('Username already taken.', 'error')
             return render_template('register.html', form=form)
@@ -614,6 +694,10 @@ def register():
 @app.route('/logout')
 def logout():
     session.clear()
+    session.pop('reset_admin_id', None)
+    session.pop('reset_code', None)
+    session.pop('contributor_reset_id', None)
+    session.pop('contributor_reset_code', None)
     flash('Logged out.', 'info')
     return redirect(url_for('login'))
 
@@ -648,7 +732,6 @@ def super_dashboard():
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
     
-    # Completed events (target reached)
     all_events = Event.query.filter_by(is_active=True).all()
     completed_events = []
     for event in all_events:
@@ -698,7 +781,6 @@ def request_payment_from_admin(event_id):
         flash('Event has no admin assigned.', 'error')
         return redirect(url_for('completed_events'))
     
-    # Send in-app notification only (no email)
     create_notification(
         admin.id,
         f"💰 Super admin is requesting payment details for your event '{event.title}'. Please reply with your payment method (M-Pesa, Bank, etc.) via Contact page.",
@@ -737,7 +819,6 @@ def super_withdraw_request():
     db.session.add(wd)
     db.session.commit()
     
-    # Notify all super admins
     super_admins = Admin.query.filter_by(is_super_admin=True).all()
     for sa in super_admins:
         create_notification(
@@ -763,7 +844,6 @@ def create_event():
         while Event.query.filter_by(token=token).first():
             token = generate_unique_token()
         try:
-            # Handle picture upload
             picture_path = None
             if form.picture.data:
                 file = form.picture.data
@@ -850,8 +930,7 @@ def edit_event(token):
         return redirect(url_for('dashboard'))
     form = EventForm(obj=event)
     if form.validate_on_submit():
-        # Handle file uploads (replace existing if new file uploaded)
-        picture_path = event.picture_url  # keep old if no new file
+        picture_path = event.picture_url
         if form.picture.data:
             file = form.picture.data
             filename = f"event_{event.token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
@@ -1096,7 +1175,7 @@ def contributor_login():
     event_token = request.args.get('event_token', '')
     form = ContributorLoginForm()
     if form.validate_on_submit():
-        username = form.username.data.strip()
+        username = form.username.data.strip().lower()
         password = form.password.data.strip()
         contrib = Contributor.query.filter_by(username=username).first()
         if not contrib:
@@ -1105,9 +1184,16 @@ def contributor_login():
         if not contrib.is_active:
             flash('This account is disabled. Contact support.', 'error')
             return render_template('contributor_login.html', form=form, event_token=event_token)
-        if not check_password(password, contrib.password_hash):
-            flash('Incorrect password. Please try again.', 'error')
+        if is_account_locked_contributor(contrib):
+            remaining = (contrib.locked_until - datetime.utcnow()).seconds // 60
+            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
             return render_template('contributor_login.html', form=form, event_token=event_token)
+        if not check_password(password, contrib.password_hash):
+            increment_login_attempts_contributor(contrib)
+            attempts_left = 5 - contrib.login_attempts
+            flash(f'Incorrect password. {attempts_left} attempts remaining.', 'error')
+            return render_template('contributor_login.html', form=form, event_token=event_token)
+        reset_login_attempts_contributor(contrib)
         session['contributor_id'] = contrib.id
         contrib.last_login = datetime.utcnow()
         db.session.commit()
@@ -1124,10 +1210,16 @@ def contributor_register():
     event_token = request.args.get('event_token', '')
     form = ContributorRegisterForm()
     if form.validate_on_submit():
-        username = form.username.data.strip()
+        username = form.username.data.strip().lower()
         password = form.password.data.strip()
         name = form.name.data.strip()
         phone = form.phone.data.strip()
+        
+        valid, msg = validate_password_strength(password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('contributor_registration.html', form=form, event_token=event_token)
+        
         if Contributor.query.filter_by(username=username).first():
             flash('Username already taken.', 'error')
             return render_template('contributor_registration.html', form=form, event_token=event_token)
@@ -1340,6 +1432,20 @@ def toggle_super_admin(aid):
     flash(f"Admin '{admin.username}' super admin status toggled.", 'success')
     return redirect(url_for('manage_admins'))
 
+@app.route('/admin/<int:aid>/reset-password', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def admin_reset_password(aid):
+    admin = Admin.query.get_or_404(aid)
+    new_password = request.form.get('new_password')
+    if not new_password or len(new_password) < 8:
+        flash('Password must be at least 8 characters.', 'error')
+        return redirect(url_for('manage_admins'))
+    admin.password_hash = hash_password(new_password)
+    db.session.commit()
+    flash(f'Password for {admin.username} has been reset.', 'success')
+    return redirect(url_for('manage_admins'))
+
 @app.route('/admin/<int:aid>/delete', methods=['POST'])
 @admin_login_required
 @super_admin_required
@@ -1414,9 +1520,9 @@ def chat():
                 return escalate_to_support_in_app(user_message)
             if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
                 return f"📊 You currently have **{total_events}** events."
-            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
+            if 'raised' in msg or 'total raised' in msg or 'collected' in msg):
                 return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
-            if 'pending' in msg or 'approval' in msg:
+            if 'pending' in msg or 'approval' in msg):
                 return f"⏳ There are **{pending_contributions}** pending contribution approvals."
             if 'fee' in msg or 'fees' in msg:
                 return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
@@ -1447,27 +1553,235 @@ For more, visit the Help page."""
         logger.error(f"AI Chat error: {e}")
         return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
 
-# ---------- Password Reset ----------
+# ---------- Contributor Forgot Password with Code ----------
+@app.route('/contributor/forgot-password', methods=['GET', 'POST'])
+def contributor_forgot_password():
+    form = ContributorForgotPasswordForm()
+    if form.validate_on_submit():
+        username = form.username.data.strip().lower()
+        email = form.email.data.strip().lower()
+        
+        contributor = Contributor.query.filter_by(username=username, email=email).first()
+        if not contributor:
+            flash('No account found with that username and email combination.', 'error')
+            return render_template('contributor_forgot_password.html', form=form)
+        
+        if is_account_locked_contributor(contributor):
+            remaining = (contributor.locked_until - datetime.utcnow()).seconds // 60
+            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
+            return render_template('contributor_forgot_password.html', form=form)
+        
+        code = ''.join(random.choices(string.digits, k=6))
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
+        
+        ContributorPasswordResetCode.query.filter_by(contributor_id=contributor.id, used=False).delete()
+        
+        reset = ContributorPasswordResetCode(
+            contributor_id=contributor.id,
+            code=code,
+            expires_at=expires_at,
+            used=False
+        )
+        db.session.add(reset)
+        db.session.commit()
+        
+        session['contributor_reset_id'] = contributor.id
+        session['contributor_reset_code'] = code
+        
+        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
+        return redirect(url_for('contributor_reset_password_with_code'))
+    
+    return render_template('contributor_forgot_password.html', form=form)
+
+@app.route('/contributor/reset-password-with-code', methods=['GET', 'POST'])
+def contributor_reset_password_with_code():
+    if 'contributor_reset_id' not in session:
+        flash('Please request a password reset first.', 'error')
+        return redirect(url_for('contributor_forgot_password'))
+    
+    form = ContributorResetPasswordCodeForm()
+    if form.validate_on_submit():
+        code = form.code.data.strip()
+        new_password = form.password.data
+        confirm = form.confirm.data
+        
+        if new_password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        valid, msg = validate_password_strength(new_password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        reset = ContributorPasswordResetCode.query.filter_by(
+            contributor_id=session['contributor_reset_id'],
+            code=code,
+            used=False
+        ).first()
+        
+        if not reset:
+            flash('Invalid code.', 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        if reset.expires_at < datetime.utcnow():
+            flash('Code has expired. Please request a new one.', 'error')
+            return redirect(url_for('contributor_forgot_password'))
+        
+        contributor = Contributor.query.get(session['contributor_reset_id'])
+        contributor.password_hash = hash_password(new_password)
+        reset.used = True
+        reset_login_attempts_contributor(contributor)
+        db.session.commit()
+        
+        session.pop('contributor_reset_id', None)
+        session.pop('contributor_reset_code', None)
+        
+        flash('Password reset successful! Please login with your new password.', 'success')
+        return redirect(url_for('contributor_login'))
+    
+    return render_template('contributor_reset_password_code.html', form=form)
+
+@app.route('/contributor/reset-password-in-app', methods=['POST'])
+@contributor_login_required
+def contributor_reset_password_in_app():
+    contributor = Contributor.query.get(session['contributor_id'])
+    current = request.form.get('current_password')
+    new = request.form.get('new_password')
+    confirm = request.form.get('confirm_password')
+    
+    if not check_password(current, contributor.password_hash):
+        flash('Current password is incorrect.', 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    if new != confirm:
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    valid, msg = validate_password_strength(new)
+    if not valid:
+        flash(msg, 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    contributor.password_hash = hash_password(new)
+    db.session.commit()
+    flash('Password changed successfully.', 'success')
+    return redirect(url_for('contributor_dashboard'))
+
+# ---------- Admin Password Reset (Existing) ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     form = ForgotPasswordForm()
     if form.validate_on_submit():
-        email = form.email.data.strip()
-        admin = Admin.query.filter_by(email=email).first()
-        if admin:
-            token = secrets.token_urlsafe(32)
-            expires = datetime.utcnow() + timedelta(hours=1)
-            reset = PasswordReset(admin_id=admin.id, token=token, expires_at=expires)
-            db.session.add(reset)
-            db.session.commit()
-            reset_link = url_for('reset_password', token=token, _external=True)
-            body = f"To reset your password, click here: {reset_link}\nThis link expires in 1 hour."
-            send_email(email, "Password Reset - GoldenVow", body)
-            flash('A password reset link has been sent to your email.', 'info')
-        else:
-            flash('No account found with that email.', 'error')
-        return redirect(url_for('forgot_password'))
+        username = form.username.data.strip().lower()
+        email = form.email.data.strip().lower()
+        
+        admin = Admin.query.filter_by(username=username, email=email).first()
+        if not admin:
+            flash('No account found with that username and email combination.', 'error')
+            return render_template('forgot_password.html', form=form)
+        
+        if is_account_locked_admin(admin):
+            remaining = (admin.locked_until - datetime.utcnow()).seconds // 60
+            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
+            return render_template('forgot_password.html', form=form)
+        
+        code = ''.join(random.choices(string.digits, k=6))
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
+        
+        PasswordResetCode.query.filter_by(admin_id=admin.id, used=False).delete()
+        
+        reset = PasswordResetCode(
+            admin_id=admin.id,
+            code=code,
+            expires_at=expires_at,
+            used=False
+        )
+        db.session.add(reset)
+        db.session.commit()
+        
+        session['reset_admin_id'] = admin.id
+        session['reset_code'] = code
+        
+        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
+        return redirect(url_for('reset_password_with_code'))
+    
     return render_template('forgot_password.html', form=form)
+
+@app.route('/reset-password-with-code', methods=['GET', 'POST'])
+def reset_password_with_code():
+    if 'reset_admin_id' not in session:
+        flash('Please request a password reset first.', 'error')
+        return redirect(url_for('forgot_password'))
+    
+    form = ResetPasswordCodeForm()
+    if form.validate_on_submit():
+        code = form.code.data.strip()
+        new_password = form.password.data
+        confirm = form.confirm.data
+        
+        if new_password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('reset_password_code.html', form=form)
+        
+        valid, msg = validate_password_strength(new_password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('reset_password_code.html', form=form)
+        
+        reset = PasswordResetCode.query.filter_by(
+            admin_id=session['reset_admin_id'],
+            code=code,
+            used=False
+        ).first()
+        
+        if not reset:
+            flash('Invalid code.', 'error')
+            return render_template('reset_password_code.html', form=form)
+        
+        if reset.expires_at < datetime.utcnow():
+            flash('Code has expired. Please request a new one.', 'error')
+            return redirect(url_for('forgot_password'))
+        
+        admin = Admin.query.get(session['reset_admin_id'])
+        admin.password_hash = hash_password(new_password)
+        reset.used = True
+        reset_login_attempts_admin(admin)
+        db.session.commit()
+        
+        session.pop('reset_admin_id', None)
+        session.pop('reset_code', None)
+        
+        flash('Password reset successful! Please login with your new password.', 'success')
+        return redirect(url_for('login'))
+    
+    return render_template('reset_password_code.html', form=form)
+
+@app.route('/reset-password-in-app', methods=['POST'])
+@admin_login_required
+def reset_password_in_app():
+    admin = Admin.query.get(session['admin_id'])
+    current = request.form.get('current_password')
+    new = request.form.get('new_password')
+    confirm = request.form.get('confirm_password')
+    
+    if not check_password(current, admin.password_hash):
+        flash('Current password is incorrect.', 'error')
+        return redirect(url_for('profile'))
+    
+    if new != confirm:
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('profile'))
+    
+    valid, msg = validate_password_strength(new)
+    if not valid:
+        flash(msg, 'error')
+        return redirect(url_for('profile'))
+    
+    admin.password_hash = hash_password(new)
+    db.session.commit()
+    flash('Password changed successfully.', 'success')
+    return redirect(url_for('profile'))
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
