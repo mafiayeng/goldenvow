@@ -22,7 +22,7 @@
         backdrop-filter: blur(8px);
         border: 1px solid var(--glass-border);
         word-wrap: break-word;
-        color: var(--text-color);
+        color: var(--text-color) !important;  /* ensure text visibility */
     }
     .chat-message.user .chat-bubble {
         background: rgba(212, 175, 55, 0.2);
@@ -57,6 +57,11 @@
         backdrop-filter: blur(12px);
         padding: 1rem 0;
         border-radius: 20px;
+    }
+    .error-bubble {
+        background: rgba(255, 0, 0, 0.15) !important;
+        border-color: #ff4444 !important;
+        color: #ff6666 !important;
     }
 </style>
 {% endblock %}
@@ -93,11 +98,11 @@
     const input = document.getElementById('message-input');
     const typing = document.getElementById('typing-indicator');
 
-    function addMessage(text, sender) {
+    function addMessage(text, sender, isError = false) {
         const div = document.createElement('div');
         div.className = `chat-message ${sender}`;
         const bubble = document.createElement('div');
-        bubble.className = 'chat-bubble';
+        bubble.className = 'chat-bubble' + (isError ? ' error-bubble' : '');
         bubble.textContent = text;
         div.appendChild(bubble);
         chatBox.appendChild(div);
@@ -120,13 +125,13 @@
             const data = await resp.json();
             typing.style.display = 'none';
             if (data.error) {
-                addMessage('⚠️ ' + data.error, 'assistant');
+                addMessage('⚠️ ' + data.error, 'assistant', true);
             } else {
                 addMessage(data.response, 'assistant');
             }
         } catch (err) {
             typing.style.display = 'none';
-            addMessage('⚠️ Network error. Please try again.', 'assistant');
+            addMessage('⚠️ Network error. Please check your connection and try again.', 'assistant', true);
         }
     });
 </script>
