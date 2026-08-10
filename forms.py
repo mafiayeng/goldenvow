@@ -85,7 +85,9 @@ class ContactForm(FlaskForm):
 class ProfileForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     phone = StringField('Phone', validators=[DataRequired(), Length(max=20)])
-    new_password = PasswordField('New Password (leave blank to keep current)', validators=[Optional(), Length(min=8)])
+    current_password = PasswordField('Current Password', validators=[Optional()])
+    new_password = PasswordField('New Password', validators=[Optional(), Length(min=8)])
+    confirm_password = PasswordField('Confirm New Password', validators=[Optional(), Length(min=8)])
 
 
 class SettingsForm(FlaskForm):
