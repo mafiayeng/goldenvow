@@ -842,9 +842,11 @@ def super_withdraw_request():
 @admin_login_required
 def create_event():
     admin = Admin.query.get(session['admin_id'])
+    # Super admins CANNOT create events – this is by design
     if admin.is_super_admin:
-        flash('Super admins cannot create events.', 'error')
+        flash('Super admins oversee the platform. Please use a regular admin account to create events.', 'info')
         return redirect(url_for('dashboard'))
+    
     form = EventForm()
     events_count = Event.query.filter_by(admin_id=admin.id).count()
     if form.validate_on_submit():
@@ -1050,7 +1052,7 @@ def contributor_view(token):
     return render_template('contributor_view.html', contrib=contrib, event=event,
                             payments=payments, show_payments=show_payments, show_back_button=True)
 
-@app.route('/contributor/<token>/approve', methods=['POST'])
+@app.route('/contributor/<token>/approve', methods(['POST'])
 @admin_login_required
 def approve_contributor(token):
     admin = Admin.query.get(session['admin_id'])
@@ -1335,8 +1337,21 @@ def profile():
     if form.validate_on_submit():
         admin.email = form.email.data
         admin.phone = form.phone.data
-        if form.new_password.data:
+        
+        # Handle password change
+        if form.current_password.data:
+            if not check_password(form.current_password.data, admin.password_hash):
+                flash('Current password is incorrect.', 'error')
+                return render_template('profile.html', form=form, admin=admin)
+            if form.new_password.data != form.confirm_password.data:
+                flash('New passwords do not match.', 'error')
+                return render_template('profile.html', form=form, admin=admin)
+            valid, msg = validate_password_strength(form.new_password.data)
+            if not valid:
+                flash(msg, 'error')
+                return render_template('profile.html', form=form, admin=admin)
             admin.password_hash = hash_password(form.new_password.data)
+        
         db.session.commit()
         flash('Profile updated.', 'success')
         return redirect(url_for('profile'))
@@ -1528,7 +1543,7 @@ def chat():
                 return escalate_to_support_in_app(user_message)
             if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
                 return f"📊 You currently have **{total_events}** events."
-            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:   # <-- FIXED
+            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
                 return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
             if 'pending' in msg or 'approval' in msg:
                 return f"⏳ There are **{pending_contributions}** pending contribution approvals."
@@ -1676,7 +1691,7 @@ def contributor_reset_password_in_app():
     flash('Password changed successfully.', 'success')
     return redirect(url_for('contributor_dashboard'))
 
-# ---------- Admin Password Reset (Existing) ----------
+# ---------- Admin Password Reset (in-app code, no email) ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     form = ForgotPasswordForm()
