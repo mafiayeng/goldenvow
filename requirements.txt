@@ -9,3 +9,4 @@ psycopg2-binary==2.9.9
 Werkzeug==3.0.3
 email-validator==2.1.1
 requests==2.31.0
+openai==1.35.13
