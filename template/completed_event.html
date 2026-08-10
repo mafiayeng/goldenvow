@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Completed Events{% endblock %}
+{% block content %}
+
+<!-- Header -->
+<div class="glass p-4 mb-4" style="background: rgba(212, 175, 55, 0.05); border-color: rgba(212, 175, 55, 0.2);">
+    <div class="d-flex justify-content-between align-items-center flex-wrap">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-trophy text-gold me-2"></i>Completed Events</h2>
+            <p style="color: var(--text-muted);">Events that have reached their target. Request payment from the event admin.</p>
+        </div>
+        <a href="{{ url_for('super_dashboard') }}" class="btn btn-glass">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+</div>
+
+{% if completed_events %}
+<div class="row g-3">
+    {% for item in completed_events %}
+    <div class="col-md-6">
+        <div class="glass p-3">
+            <div class="d-flex justify-content-between align-items-start flex-wrap">
+                <div>
+                    <h5>{{ item.event.title }}</h5>
+                    <p class="mb-0" style="color: var(--text-muted);">
+                        Raised: <span class="text-gold">KES {{ item.raised|round(2) }}</span> 
+                        / Target: KES {{ item.event.target_amount|round(2) }}
+                    </p>
+                    <p class="mb-0" style="color: var(--text-muted); font-size: 0.9rem;">
+                        <i class="fas fa-user me-1"></i>Admin: <strong>{{ item.admin.username }}</strong>
+                        <span class="mx-2">|</span>
+                        <i class="fas fa-phone me-1"></i>{{ item.admin.phone or 'No phone' }}
+                    </p>
+                    <p class="mb-0" style="color: var(--text-muted); font-size: 0.9rem;">
+                        <i class="fas fa-coins text-gold me-1"></i>Fee: <span class="text-gold">KES {{ item.fee|round(2) }}</span>
+                    </p>
+                    <small style="color: var(--text-muted); opacity: 0.6;">
+                        Completed: {{ item.event.created_at.strftime('%Y-%m-%d') }}
+                    </small>
+                </div>
+                <div class="text-end mt-2 mt-md-0">
+                    <a href="{{ url_for('event_landing', token=item.event.token) }}" class="btn btn-sm btn-glass mb-2 d-block">
+                        <i class="fas fa-eye me-1"></i>View
+                    </a>
+                    <form method="POST" action="{{ url_for('request_payment_from_admin', event_id=item.event.id) }}">
+                        {{ csrf_token() }}
+                        <button type="submit" class="btn btn-sm btn-gold w-100">
+                            <i class="fas fa-paper-plane me-1"></i>Request Payment
+                        </button>
+                    </form>
+                    <small class="text-muted" style="font-size: 0.7rem;">Sends in-app notification</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="glass p-5 text-center">
+    <i class="fas fa-hourglass-half text-gold fa-4x mb-3"></i>
+    <h4>No completed events yet</h4>
+    <p style="color: var(--text-muted);">Events that reach their target will appear here for fee collection.</p>
+</div>
+{% endif %}
+
+{% endblock %}
