@@ -136,7 +136,7 @@
                 <td>{{ a.username }}</td>
                 <td>{{ a.email }}</td>
                 <td>{{ a.phone }}</td>
-                <td>{{ Event.query.filter_by(admin_id=a.id).count() }}</td>
+                <td>{{ a.event_count }}</td>
                 <td>{{ '✅' if a.is_super_admin else '❌' }}</td>
                 <td>{{ '✅' if a.is_active else '❌' }}</td>
             </tr>
