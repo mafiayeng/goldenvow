@@ -732,51 +732,56 @@ def dashboard():
 @admin_login_required
 @super_admin_required
 def super_dashboard():
-    admin = Admin.query.get(session['admin_id'])
-    total_events = Event.query.count()
-    total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
-    total_fees = get_global_total_fees()
-    pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
-    
-    # Get all admins with their event counts
-    admins = Admin.query.all()
-    admin_list = []
-    for a in admins:
-        admin_list.append({
-            'id': a.id,
-            'username': a.username,
-            'email': a.email,
-            'phone': a.phone,
-            'is_super_admin': a.is_super_admin,
-            'is_active': a.is_active,
-            'event_count': Event.query.filter_by(admin_id=a.id).count()
-        })
-    
-    announcements = Announcement.query.filter_by(is_active=True).filter(
-        (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
-    ).order_by(desc(Announcement.created_at)).all()
-    
-    # Completed events (target reached)
-    all_events = Event.query.filter_by(is_active=True).all()
-    completed_events = []
-    for event in all_events:
-        raised = get_event_total_contributions(event.id)
-        if raised >= event.target_amount and event.target_amount > 0:
-            completed_events.append({
-                'event': event,
-                'raised': raised,
-                'fee': get_event_total_fee(event.id)
+    try:
+        admin = Admin.query.get(session['admin_id'])
+        total_events = Event.query.count()
+        total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
+        total_fees = get_global_total_fees()
+        pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
+        
+        # Get all admins with their event counts
+        admins = Admin.query.all()
+        admin_list = []
+        for a in admins:
+            admin_list.append({
+                'id': a.id,
+                'username': a.username,
+                'email': a.email,
+                'phone': a.phone,
+                'is_super_admin': a.is_super_admin,
+                'is_active': a.is_active,
+                'event_count': Event.query.filter_by(admin_id=a.id).count()
             })
-    
-    return render_template('super_dashboard.html', 
-                            admin=admin, 
-                            total_events=total_events,
-                            total_contributions=total_contributions, 
-                            total_fees=total_fees,
-                            pending_withdrawals=pending_withdrawals, 
-                            admins=admin_list,
-                            announcements=announcements,
-                            completed_events=completed_events)
+        
+        announcements = Announcement.query.filter_by(is_active=True).filter(
+            (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
+        ).order_by(desc(Announcement.created_at)).all()
+        
+        # Completed events (target reached)
+        all_events = Event.query.filter_by(is_active=True).all()
+        completed_events = []
+        for event in all_events:
+            raised = get_event_total_contributions(event.id)
+            if raised >= event.target_amount and event.target_amount > 0:
+                completed_events.append({
+                    'event': event,
+                    'raised': raised,
+                    'fee': get_event_total_fee(event.id)
+                })
+        
+        return render_template('super_dashboard.html', 
+                                admin=admin, 
+                                total_events=total_events,
+                                total_contributions=total_contributions, 
+                                total_fees=total_fees,
+                                pending_withdrawals=pending_withdrawals, 
+                                admins=admin_list,
+                                announcements=announcements,
+                                completed_events=completed_events)
+    except Exception as e:
+        logger.error(f"Super dashboard error: {e}")
+        flash('An error occurred loading the super dashboard.', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/super/completed-events')
 @admin_login_required
@@ -863,18 +868,19 @@ def super_withdraw_request():
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
 def create_event():
-    admin = Admin.query.get(session['admin_id'])
-    if admin.is_super_admin:
-        flash('Super admins oversee the platform. Please use a regular admin account to create events.', 'info')
-        return redirect(url_for('dashboard'))
-    
-    form = EventForm()
-    events_count = Event.query.filter_by(admin_id=admin.id).count()
-    if form.validate_on_submit():
-        token = generate_unique_token()
-        while Event.query.filter_by(token=token).first():
+    try:
+        admin = Admin.query.get(session['admin_id'])
+        if admin.is_super_admin:
+            flash('Super admins oversee the platform. Please use a regular admin account to create events.', 'info')
+            return redirect(url_for('dashboard'))
+        
+        form = EventForm()
+        events_count = Event.query.filter_by(admin_id=admin.id).count()
+        if form.validate_on_submit():
             token = generate_unique_token()
-        try:
+            while Event.query.filter_by(token=token).first():
+                token = generate_unique_token()
+            
             picture_path = None
             if form.picture.data:
                 file = form.picture.data
@@ -924,10 +930,11 @@ def create_event():
             db.session.commit()
             flash('Event created successfully!', 'success')
             return redirect(url_for('dashboard'))
-        except Exception as e:
-            logger.error(f"Event creation error: {e}")
-            flash('An error occurred while creating the event.', 'error')
-    return render_template('create_event.html', form=form, events_count=events_count)
+        return render_template('create_event.html', form=form, events_count=events_count)
+    except Exception as e:
+        logger.error(f"Create event error: {e}")
+        flash('An error occurred creating the event.', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/events/<token>')
 def event_landing(token):
@@ -1526,7 +1533,7 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
-# ---------- AI Chat Route with General Knowledge ----------
+# ---------- AI Chat Route ----------
 @app.route('/api/chat', methods=['POST'])
 @csrf.exempt
 @admin_login_required
@@ -1564,7 +1571,7 @@ def chat():
         platform_keywords = ['event', 'contribution', 'fee', 'admin', 'raised', 'pending', 'approval', 'withdraw', 'referral', 'goldenvow']
         is_platform_question = any(keyword in user_message.lower() for keyword in platform_keywords)
 
-        # Try to answer platform questions first (faster, no API needed)
+        # Answer platform questions
         if is_platform_question:
             msg_lower = user_message.lower()
             if 'event' in msg_lower and ('count' in msg_lower or 'many' in msg_lower or 'total' in msg_lower):
@@ -1621,7 +1628,7 @@ For more, visit the Help page."""})
             except Exception as e:
                 logger.warning(f"OpenAI API error: {e}")
 
-        # Fallback response for general questions
+        # Fallback response
         fallback_response = """I'm a specialized assistant for GoldenVow – a fundraising platform. I can help you with:
 - Event statistics and management
 - Contribution tracking and approvals
@@ -1776,7 +1783,7 @@ def manage_feature_requests():
     return render_template('feature_requests.html')
 
 @app.route('/feature-request', methods=['GET', 'POST'])
-@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])  # <-- FIXED
+@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])
 def submit_feature_request(event_token=None):
     flash('Feature request feature is coming soon.', 'info')
     return redirect(url_for('index'))
