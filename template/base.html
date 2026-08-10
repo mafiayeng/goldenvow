@@ -344,8 +344,8 @@
                         {% if get_admin() and get_admin().is_super_admin %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('contact_messages') }}"><i class="fas fa-envelope me-1"></i>Messages</a></li>
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('completed_events') }}"><i class="fas fa-check-circle me-1"></i>Completed</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_chats') }}"><i class="fas fa-comments me-1"></i>Chats</a></li>
                         {% endif %}
-                        <!-- Notifications -->
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('notifications') }}" title="Notifications">
                                 <i class="fas fa-bell"></i>
@@ -379,7 +379,6 @@
     </nav>
 
     <div class="container mt-4">
-        <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, msg in messages %}
@@ -406,13 +405,11 @@
         </div>
     </footer>
 
-    <!-- Floating WhatsApp -->
     <a href="https://wa.me/{{ support_whatsapp|replace('+', '')|replace(' ', '') }}" 
        class="whatsapp-float" target="_blank" rel="noopener noreferrer" aria-label="Chat on WhatsApp">
         <i class="fab fa-whatsapp"></i>
     </a>
 
-    <!-- Back Button (if show_back_button is True) -->
     {% if show_back_button %}
     <a href="javascript:history.back()" class="back-float" aria-label="Go back">
         <i class="fas fa-arrow-left"></i>
@@ -421,7 +418,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ===== THEME TOGGLE =====
+        // Theme toggle
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const html = document.documentElement;
@@ -436,7 +433,7 @@
             themeIcon.className = next === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
         });
 
-        // ===== PASSWORD TOGGLE (EYE) =====
+        // Password toggle (eye)
         function togglePassword(button) {
             const wrapper = button.closest('.password-wrapper');
             const input = wrapper.querySelector('input');
