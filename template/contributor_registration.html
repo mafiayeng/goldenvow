@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Contributor Register{% endblock %}
+{% block head %}
+<style>
+    .password-wrapper {
+        position: relative;
+    }
+    .password-wrapper .toggle-password {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: var(--text-muted);
+        background: none;
+        border: none;
+        z-index: 10;
+    }
+    .password-wrapper .toggle-password:hover {
+        color: var(--gold);
+    }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
@@ -13,13 +34,14 @@
                 <div class="mb-3">
                     {{ form.username.label(class="form-label") }}
                     {{ form.username(class="form-control", placeholder="Choose a username") }}
-                    <small class="text-muted">Letters, numbers, and underscores only.</small>
                 </div>
                 
-                <div class="mb-3">
+                <div class="mb-3 password-wrapper">
                     {{ form.password.label(class="form-label") }}
                     {{ form.password(class="form-control", placeholder="Min 8 characters") }}
-                    <small class="text-muted">Must contain at least one number and one special character.</small>
+                    <button type="button" class="toggle-password" onclick="togglePassword(this)">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
                 
                 <div class="mb-3">
@@ -32,27 +54,27 @@
                     {{ form.phone(class="form-control", placeholder="2547XX XXX XXX") }}
                 </div>
                 
-                <button type="submit" class="btn btn-gold w-100">
-                    <i class="fas fa-user-check me-2"></i>Register
-                </button>
+                <button type="submit" class="btn btn-gold w-100"><i class="fas fa-user-check me-2"></i>Register</button>
             </form>
             
             <div class="text-center mt-3">
-                <p>
-                    Already registered? 
-                    <a href="{{ url_for('contributor_login', event_token=event_token) }}" class="text-gold">
-                        Login here
-                    </a>
-                </p>
-                {% if event_token %}
-                    <p>
-                        <a href="{{ url_for('event_landing', token=event_token) }}" class="btn btn-glass btn-sm">
-                            <i class="fas fa-arrow-left me-1"></i>Back to Event
-                        </a>
-                    </p>
-                {% endif %}
+                <p>Already registered? <a href="{{ url_for('contributor_login', event_token=event_token) }}" class="text-gold">Login here</a></p>
             </div>
         </div>
     </div>
 </div>
+<script>
+    function togglePassword(button) {
+        const wrapper = button.closest('.password-wrapper');
+        const input = wrapper.querySelector('input');
+        const icon = button.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.className = 'fas fa-eye-slash';
+        } else {
+            input.type = 'password';
+            icon.className = 'fas fa-eye';
+        }
+    }
+</script>
 {% endblock %}
