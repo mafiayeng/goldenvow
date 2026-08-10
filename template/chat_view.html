@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+{% block head %}
+<style>
+    .chat-container {
+        max-height: 500px;
+        overflow-y: auto;
+        padding: 1rem 0;
+    }
+    .chat-message {
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+    }
+    .chat-message.admin { align-items: flex-end; }
+    .chat-message.contributor { align-items: flex-start; }
+    .chat-bubble {
+        max-width: 80%;
+        padding: 0.75rem 1.25rem;
+        border-radius: 20px;
+        word-wrap: break-word;
+        color: var(--text-color) !important;
+    }
+    .chat-message.admin .chat-bubble {
+        background: rgba(212, 175, 55, 0.2);
+        border: 1px solid var(--gold);
+    }
+    .chat-message.contributor .chat-bubble {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+    }
+    .chat-message .timestamp {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+    }
+    .chat-input-area {
+        position: sticky;
+        bottom: 0;
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        padding: 1rem 0;
+        border-radius: 20px;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="glass p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0">{{ conversation.subject or 'Chat' }}</h2>
+            <small class="text-muted">
+                {% if conversation.contributor %}
+                    <i class="fas fa-user me-1"></i>{{ conversation.contributor.name }}
+                {% endif %}
+                {% if conversation.admin %}
+                    <span class="mx-2">|</span>
+                    <i class="fas fa-user-cog me-1"></i>{{ conversation.admin.username }}
+                {% endif %}
+            </small>
+        </div>
+        <a href="{{ url_for('admin_chats') if session.get('admin_id') else url_for('contributor_chats') }}" class="btn btn-glass">
+            <i class="fas fa-arrow-left me-2"></i>Back
+        </a>
+    </div>
+    
+    <div class="chat-container" id="chatContainer">
+        {% for msg in messages %}
+        <div class="chat-message {{ msg.sender_type }}">
+            <div class="chat-bubble">
+                {{ msg.message }}
+                <div class="timestamp">{{ msg.created_at.strftime('%H:%M %d/%m/%Y') }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="chat-input-area">
+        <form method="POST" action="{{ url_for('send_chat_message', conv_id=conversation.id) }}" class="d-flex gap-2">
+            {{ csrf_token() }}
+            <input type="hidden" name="sender_type" value="{% if session.get('admin_id') %}admin{% else %}contributor{% endif %}">
+            <input type="text" name="message" class="form-control" placeholder="Type your message..." required>
+            <button type="submit" class="btn btn-gold">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </form>
+    </div>
+</div>
+<script>
+    const container = document.getElementById('chatContainer');
+    container.scrollTop = container.scrollHeight;
+    setInterval(() => {
+        location.reload();
+    }, 10000);
+</script>
+{% endblock %}
