@@ -740,6 +740,7 @@ def super_dashboard():
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
     
+    # Completed events (target reached)
     all_events = Event.query.filter_by(is_active=True).all()
     completed_events = []
     for event in all_events:
@@ -765,18 +766,23 @@ def super_dashboard():
 @admin_login_required
 @super_admin_required
 def completed_events():
-    all_events = Event.query.filter_by(is_active=True).all()
-    completed_events = []
-    for event in all_events:
-        raised = get_event_total_contributions(event.id)
-        if raised >= event.target_amount and event.target_amount > 0:
-            completed_events.append({
-                'event': event,
-                'raised': raised,
-                'fee': get_event_total_fee(event.id),
-                'admin': event.admin
-            })
-    return render_template('completed_events.html', completed_events=completed_events)
+    try:
+        all_events = Event.query.filter_by(is_active=True).all()
+        completed_events = []
+        for event in all_events:
+            raised = get_event_total_contributions(event.id)
+            if raised >= event.target_amount and event.target_amount > 0:
+                completed_events.append({
+                    'event': event,
+                    'raised': raised,
+                    'fee': get_event_total_fee(event.id),
+                    'admin': event.admin
+                })
+        return render_template('completed_events.html', completed_events=completed_events)
+    except Exception as e:
+        logger.error(f"Completed events error: {e}")
+        flash('An error occurred loading completed events.', 'error')
+        return redirect(url_for('super_dashboard'))
 
 @app.route('/super/request-payment/<int:event_id>', methods=['POST'])
 @admin_login_required
@@ -1052,7 +1058,7 @@ def contributor_view(token):
     return render_template('contributor_view.html', contrib=contrib, event=event,
                             payments=payments, show_payments=show_payments, show_back_button=True)
 
-@app.route('/contributor/<token>/approve', methods=['POST'])  # <-- FIXED: methods=['POST']
+@app.route('/contributor/<token>/approve', methods=['POST'])
 @admin_login_required
 def approve_contributor(token):
     admin = Admin.query.get(session['admin_id'])
