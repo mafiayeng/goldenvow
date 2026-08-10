@@ -1052,7 +1052,7 @@ def contributor_view(token):
     return render_template('contributor_view.html', contrib=contrib, event=event,
                             payments=payments, show_payments=show_payments, show_back_button=True)
 
-@app.route('/contributor/<token>/approve', methods(['POST'])
+@app.route('/contributor/<token>/approve', methods=['POST'])  # <-- FIXED: methods=['POST']
 @admin_login_required
 def approve_contributor(token):
     admin = Admin.query.get(session['admin_id'])
