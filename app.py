@@ -303,7 +303,7 @@ class Announcement(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
 
-# ---------- Chat Models ----------
+# ---------- Chat Models (NEW) ----------
 class ChatConversation(db.Model):
     __tablename__ = 'chat_conversation'
     id = db.Column(db.Integer, primary_key=True)
@@ -315,8 +315,8 @@ class ChatConversation(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (Index('idx_chat_conversation_admin', 'admin_id'), Index('idx_chat_conversation_contributor', 'contributor_id'),)
 
-class ChatMessage(db.Model):
-    __tablename__ = 'chat_message'
+class SupportMessage(db.Model):
+    __tablename__ = 'support_message'  # Renamed to avoid conflict with existing ChatMessage
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('chat_conversation.id', ondelete='CASCADE'))
     sender_type = db.Column(db.String(20), nullable=False)  # 'admin' or 'contributor'
@@ -324,7 +324,7 @@ class ChatMessage(db.Model):
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    __table_args__ = (Index('idx_chat_message_conversation', 'conversation_id'), Index('idx_chat_message_created', 'created_at'),)
+    __table_args__ = (Index('idx_support_message_conversation', 'conversation_id'), Index('idx_support_message_created', 'created_at'),)
 
 # ---------- Security Helper Functions ----------
 def is_account_locked_admin(admin):
@@ -904,7 +904,6 @@ def create_event():
             while Event.query.filter_by(token=token).first():
                 token = generate_unique_token()
             
-            # Handle picture upload
             picture_path = None
             if form.picture.data:
                 try:
@@ -919,7 +918,6 @@ def create_event():
                 except Exception as e:
                     logger.error(f"Picture upload error: {e}")
 
-            # Handle background image upload
             bg_path = None
             if form.background_image.data:
                 try:
@@ -1684,7 +1682,7 @@ To talk to a human, just say "talk to a human" or "contact support"."""
         logger.error(f"AI Chat error: {e}")
         return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
 
-# ---------- Chat Routes ----------
+# ---------- Chat Routes (Support Chat) ----------
 @app.route('/chat/start', methods=['POST'])
 @admin_login_required
 def start_chat():
@@ -1723,7 +1721,7 @@ def view_chat(conv_id):
         flash('Unauthorized.', 'error')
         return redirect(url_for('dashboard'))
     
-    messages = ChatMessage.query.filter_by(conversation_id=conv_id).order_by(ChatMessage.created_at).all()
+    messages = SupportMessage.query.filter_by(conversation_id=conv_id).order_by(SupportMessage.created_at).all()
     return render_template('chat_view.html', conversation=conversation, messages=messages)
 
 @app.route('/chat/<int:conv_id>/send', methods=['POST'])
@@ -1747,7 +1745,7 @@ def send_chat_message(conv_id):
             return redirect(url_for('contributor_login'))
         sender_id = session['contributor_id']
     
-    chat_msg = ChatMessage(
+    chat_msg = SupportMessage(
         conversation_id=conv_id,
         sender_type=sender_type,
         sender_id=sender_id,
