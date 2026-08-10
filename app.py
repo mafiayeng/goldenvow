@@ -26,6 +26,7 @@ import bcrypt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
+import requests
 
 from forms import *
 
@@ -62,6 +63,7 @@ EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_USER = os.environ.get('EMAIL_USER', 'goldenvowsupport@gmail.com')
 EMAIL_PASS = os.environ.get('EMAIL_PASS')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 STATUS_PENDING = 'pending'
 STATUS_APPROVED = 'approved'
@@ -735,7 +737,21 @@ def super_dashboard():
     total_contributions = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
     total_fees = get_global_total_fees()
     pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
+    
+    # Get all admins with their event counts
     admins = Admin.query.all()
+    admin_list = []
+    for a in admins:
+        admin_list.append({
+            'id': a.id,
+            'username': a.username,
+            'email': a.email,
+            'phone': a.phone,
+            'is_super_admin': a.is_super_admin,
+            'is_active': a.is_active,
+            'event_count': Event.query.filter_by(admin_id=a.id).count()
+        })
+    
     announcements = Announcement.query.filter_by(is_active=True).filter(
         (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
     ).order_by(desc(Announcement.created_at)).all()
@@ -758,7 +774,7 @@ def super_dashboard():
                             total_contributions=total_contributions, 
                             total_fees=total_fees,
                             pending_withdrawals=pending_withdrawals, 
-                            admins=admins,
+                            admins=admin_list,
                             announcements=announcements,
                             completed_events=completed_events)
 
@@ -848,7 +864,6 @@ def super_withdraw_request():
 @admin_login_required
 def create_event():
     admin = Admin.query.get(session['admin_id'])
-    # Super admins CANNOT create events – this is by design
     if admin.is_super_admin:
         flash('Super admins oversee the platform. Please use a regular admin account to create events.', 'info')
         return redirect(url_for('dashboard'))
@@ -1344,7 +1359,6 @@ def profile():
         admin.email = form.email.data
         admin.phone = form.phone.data
         
-        # Handle password change
         if form.current_password.data:
             if not check_password(form.current_password.data, admin.password_hash):
                 flash('Current password is incorrect.', 'error')
@@ -1512,19 +1526,21 @@ def add_testimonial(token):
 def ai_helper():
     return render_template('ai_helper.html', show_back_button=True)
 
+# ---------- AI Chat Route with General Knowledge ----------
 @app.route('/api/chat', methods=['POST'])
 @csrf.exempt
 @admin_login_required
 def chat():
     try:
         data = request.get_json()
-        user_message = data.get('message', '').strip().lower()
+        user_message = data.get('message', '').strip()
         if not user_message:
             return jsonify({'error': 'Message is required'}), 400
 
         admin = Admin.query.get(session['admin_id'])
         admin_name = admin.username if admin else "Unknown"
 
+        # System stats
         total_events = Event.query.count()
         total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
         pending_contributions = Contributor.query.filter_by(status=STATUS_PENDING).count()
@@ -1544,160 +1560,85 @@ def chat():
                 )
             return "✅ Your question has been sent to the support team via in-app notifications. Check your bell icon for updates."
 
-        def respond(msg):
-            if any(word in msg for word in ['human', 'agent', 'support', 'talk to', 'contact support']):
-                return escalate_to_support_in_app(user_message)
-            if 'event' in msg and ('count' in msg or 'many' in msg or 'total' in msg):
-                return f"📊 You currently have **{total_events}** events."
-            if 'raised' in msg or 'total raised' in msg or 'collected' in msg:
-                return f"💰 Total contributions raised: **KES {total_raised:,.2f}**."
-            if 'pending' in msg or 'approval' in msg:
-                return f"⏳ There are **{pending_contributions}** pending contribution approvals."
-            if 'fee' in msg or 'fees' in msg:
-                return f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."
-            if 'admin' in msg:
-                if 'active' in msg:
-                    return f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."
-                return f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."
-            if 'recent' in msg or 'latest' in msg:
-                if recent_events_text:
-                    return f"📅 Recent events:\n{recent_events_text}"
-                return "No recent events found."
-            if 'help' in msg or 'guide' in msg or 'how' in msg:
-                return """📖 **Quick Guide**
-1. **Create an event** – click “Create Event” and fill the details.
-2. **Add contributors** – under the event, click “Manage” → “Add Contributor”.
-3. **Approve contributions** – when a contributor submits proof, review and click “Approve”.
-4. **Withdraw fees** – as super admin, go to Withdrawals → Request.
-5. **Lock page** – if you want to disable contributions, use the “Lock Page” button.
-For more, visit the Help page."""
-            if 'hello' in msg or 'hi' in msg or 'hey' in msg:
-                return "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."
-            return escalate_to_support_in_app(user_message)
+        # Check if it's a platform-related question
+        platform_keywords = ['event', 'contribution', 'fee', 'admin', 'raised', 'pending', 'approval', 'withdraw', 'referral', 'goldenvow']
+        is_platform_question = any(keyword in user_message.lower() for keyword in platform_keywords)
 
-        response = respond(user_message)
-        return jsonify({'response': response})
+        # Try to answer platform questions first (faster, no API needed)
+        if is_platform_question:
+            msg_lower = user_message.lower()
+            if 'event' in msg_lower and ('count' in msg_lower or 'many' in msg_lower or 'total' in msg_lower):
+                return jsonify({'response': f"📊 You currently have **{total_events}** events on the platform."})
+            if 'raised' in msg_lower or 'total raised' in msg_lower or 'collected' in msg_lower:
+                return jsonify({'response': f"💰 Total contributions raised: **KES {total_raised:,.2f}**."})
+            if 'pending' in msg_lower or 'approval' in msg_lower:
+                return jsonify({'response': f"⏳ There are **{pending_contributions}** pending contribution approvals."})
+            if 'fee' in msg_lower or 'fees' in msg_lower:
+                return jsonify({'response': f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."})
+            if 'admin' in msg_lower:
+                if 'active' in msg_lower:
+                    return jsonify({'response': f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."})
+                return jsonify({'response': f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."})
+            if 'recent' in msg_lower or 'latest' in msg_lower:
+                if recent_events_text:
+                    return jsonify({'response': f"📅 Recent events:\n{recent_events_text}"})
+                return jsonify({'response': "No recent events found."})
+            if 'help' in msg_lower or 'guide' in msg_lower or 'how' in msg_lower:
+                return jsonify({'response': """📖 **Quick Guide**
+1. **Create an event** – click "Create Event" and fill the details.
+2. **Add contributors** – under the event, click "Manage" → "Add Contributor".
+3. **Approve contributions** – when a contributor submits proof, review and click "Approve".
+4. **Withdraw fees** – as super admin, go to Withdrawals → Request.
+5. **Lock page** – if you want to disable contributions, use the "Lock Page" button.
+For more, visit the Help page."""})
+            if 'hello' in msg_lower or 'hi' in msg_lower or 'hey' in msg_lower:
+                return jsonify({'response': "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."})
+
+        # For general questions, try OpenAI API if available
+        if OPENAI_API_KEY:
+            try:
+                response = requests.post(
+                    'https://api.openai.com/v1/chat/completions',
+                    headers={
+                        'Authorization': f'Bearer {OPENAI_API_KEY}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'model': 'gpt-3.5-turbo',
+                        'messages': [
+                            {'role': 'system', 'content': 'You are a helpful assistant. Answer the user\'s question concisely and helpfully.'},
+                            {'role': 'user', 'content': user_message}
+                        ],
+                        'max_tokens': 300,
+                        'temperature': 0.7
+                    },
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    ai_response = data['choices'][0]['message']['content']
+                    return jsonify({'response': ai_response})
+            except Exception as e:
+                logger.warning(f"OpenAI API error: {e}")
+
+        # Fallback response for general questions
+        fallback_response = """I'm a specialized assistant for GoldenVow – a fundraising platform. I can help you with:
+- Event statistics and management
+- Contribution tracking and approvals
+- Fee calculations and withdrawals
+- Platform guidance and troubleshooting
+
+For general knowledge questions, I recommend checking Google or other sources. I'm here to help with your fundraising needs! 😊
+
+If you need human support, I can escalate your question to the support team."""
+        
+        return jsonify({'response': fallback_response})
 
     except Exception as e:
         logger.error(f"AI Chat error: {e}")
         return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
 
-# ---------- Contributor Forgot Password with Code ----------
-@app.route('/contributor/forgot-password', methods=['GET', 'POST'])
-def contributor_forgot_password():
-    form = ContributorForgotPasswordForm()
-    if form.validate_on_submit():
-        username = form.username.data.strip().lower()
-        email = form.email.data.strip().lower()
-        
-        contributor = Contributor.query.filter_by(username=username, email=email).first()
-        if not contributor:
-            flash('No account found with that username and email combination.', 'error')
-            return render_template('contributor_forgot_password.html', form=form)
-        
-        if is_account_locked_contributor(contributor):
-            remaining = (contributor.locked_until - datetime.utcnow()).seconds // 60
-            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
-            return render_template('contributor_forgot_password.html', form=form)
-        
-        code = ''.join(random.choices(string.digits, k=6))
-        expires_at = datetime.utcnow() + timedelta(minutes=15)
-        
-        ContributorPasswordResetCode.query.filter_by(contributor_id=contributor.id, used=False).delete()
-        
-        reset = ContributorPasswordResetCode(
-            contributor_id=contributor.id,
-            code=code,
-            expires_at=expires_at,
-            used=False
-        )
-        db.session.add(reset)
-        db.session.commit()
-        
-        session['contributor_reset_id'] = contributor.id
-        session['contributor_reset_code'] = code
-        
-        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
-        return redirect(url_for('contributor_reset_password_with_code'))
-    
-    return render_template('contributor_forgot_password.html', form=form)
-
-@app.route('/contributor/reset-password-with-code', methods=['GET', 'POST'])
-def contributor_reset_password_with_code():
-    if 'contributor_reset_id' not in session:
-        flash('Please request a password reset first.', 'error')
-        return redirect(url_for('contributor_forgot_password'))
-    
-    form = ContributorResetPasswordCodeForm()
-    if form.validate_on_submit():
-        code = form.code.data.strip()
-        new_password = form.password.data
-        confirm = form.confirm.data
-        
-        if new_password != confirm:
-            flash('Passwords do not match.', 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
-        
-        valid, msg = validate_password_strength(new_password)
-        if not valid:
-            flash(msg, 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
-        
-        reset = ContributorPasswordResetCode.query.filter_by(
-            contributor_id=session['contributor_reset_id'],
-            code=code,
-            used=False
-        ).first()
-        
-        if not reset:
-            flash('Invalid code.', 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
-        
-        if reset.expires_at < datetime.utcnow():
-            flash('Code has expired. Please request a new one.', 'error')
-            return redirect(url_for('contributor_forgot_password'))
-        
-        contributor = Contributor.query.get(session['contributor_reset_id'])
-        contributor.password_hash = hash_password(new_password)
-        reset.used = True
-        reset_login_attempts_contributor(contributor)
-        db.session.commit()
-        
-        session.pop('contributor_reset_id', None)
-        session.pop('contributor_reset_code', None)
-        
-        flash('Password reset successful! Please login with your new password.', 'success')
-        return redirect(url_for('contributor_login'))
-    
-    return render_template('contributor_reset_password_code.html', form=form)
-
-@app.route('/contributor/reset-password-in-app', methods=['POST'])
-@contributor_login_required
-def contributor_reset_password_in_app():
-    contributor = Contributor.query.get(session['contributor_id'])
-    current = request.form.get('current_password')
-    new = request.form.get('new_password')
-    confirm = request.form.get('confirm_password')
-    
-    if not check_password(current, contributor.password_hash):
-        flash('Current password is incorrect.', 'error')
-        return redirect(url_for('contributor_dashboard'))
-    
-    if new != confirm:
-        flash('New passwords do not match.', 'error')
-        return redirect(url_for('contributor_dashboard'))
-    
-    valid, msg = validate_password_strength(new)
-    if not valid:
-        flash(msg, 'error')
-        return redirect(url_for('contributor_dashboard'))
-    
-    contributor.password_hash = hash_password(new)
-    db.session.commit()
-    flash('Password changed successfully.', 'success')
-    return redirect(url_for('contributor_dashboard'))
-
-# ---------- Admin Password Reset (in-app code, no email) ----------
+# ---------- Password Reset Routes ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
     form = ForgotPasswordForm()
@@ -1835,10 +1776,125 @@ def manage_feature_requests():
     return render_template('feature_requests.html')
 
 @app.route('/feature-request', methods=['GET', 'POST'])
-@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])
+@app.route('/feature-request/<event_token>', methods(['GET', 'POST']))
 def submit_feature_request(event_token=None):
     flash('Feature request feature is coming soon.', 'info')
     return redirect(url_for('index'))
+
+# ---------- Contributor Password Reset Routes ----------
+@app.route('/contributor/forgot-password', methods=['GET', 'POST'])
+def contributor_forgot_password():
+    form = ContributorForgotPasswordForm()
+    if form.validate_on_submit():
+        username = form.username.data.strip().lower()
+        email = form.email.data.strip().lower()
+        
+        contributor = Contributor.query.filter_by(username=username, email=email).first()
+        if not contributor:
+            flash('No account found with that username and email combination.', 'error')
+            return render_template('contributor_forgot_password.html', form=form)
+        
+        if is_account_locked_contributor(contributor):
+            remaining = (contributor.locked_until - datetime.utcnow()).seconds // 60
+            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
+            return render_template('contributor_forgot_password.html', form=form)
+        
+        code = ''.join(random.choices(string.digits, k=6))
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
+        
+        ContributorPasswordResetCode.query.filter_by(contributor_id=contributor.id, used=False).delete()
+        
+        reset = ContributorPasswordResetCode(
+            contributor_id=contributor.id,
+            code=code,
+            expires_at=expires_at,
+            used=False
+        )
+        db.session.add(reset)
+        db.session.commit()
+        
+        session['contributor_reset_id'] = contributor.id
+        session['contributor_reset_code'] = code
+        
+        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
+        return redirect(url_for('contributor_reset_password_with_code'))
+    
+    return render_template('contributor_forgot_password.html', form=form)
+
+@app.route('/contributor/reset-password-with-code', methods=['GET', 'POST'])
+def contributor_reset_password_with_code():
+    if 'contributor_reset_id' not in session:
+        flash('Please request a password reset first.', 'error')
+        return redirect(url_for('contributor_forgot_password'))
+    
+    form = ContributorResetPasswordCodeForm()
+    if form.validate_on_submit():
+        code = form.code.data.strip()
+        new_password = form.password.data
+        confirm = form.confirm.data
+        
+        if new_password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        valid, msg = validate_password_strength(new_password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        reset = ContributorPasswordResetCode.query.filter_by(
+            contributor_id=session['contributor_reset_id'],
+            code=code,
+            used=False
+        ).first()
+        
+        if not reset:
+            flash('Invalid code.', 'error')
+            return render_template('contributor_reset_password_code.html', form=form)
+        
+        if reset.expires_at < datetime.utcnow():
+            flash('Code has expired. Please request a new one.', 'error')
+            return redirect(url_for('contributor_forgot_password'))
+        
+        contributor = Contributor.query.get(session['contributor_reset_id'])
+        contributor.password_hash = hash_password(new_password)
+        reset.used = True
+        reset_login_attempts_contributor(contributor)
+        db.session.commit()
+        
+        session.pop('contributor_reset_id', None)
+        session.pop('contributor_reset_code', None)
+        
+        flash('Password reset successful! Please login with your new password.', 'success')
+        return redirect(url_for('contributor_login'))
+    
+    return render_template('contributor_reset_password_code.html', form=form)
+
+@app.route('/contributor/reset-password-in-app', methods=['POST'])
+@contributor_login_required
+def contributor_reset_password_in_app():
+    contributor = Contributor.query.get(session['contributor_id'])
+    current = request.form.get('current_password')
+    new = request.form.get('new_password')
+    confirm = request.form.get('confirm_password')
+    
+    if not check_password(current, contributor.password_hash):
+        flash('Current password is incorrect.', 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    if new != confirm:
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    valid, msg = validate_password_strength(new)
+    if not valid:
+        flash(msg, 'error')
+        return redirect(url_for('contributor_dashboard'))
+    
+    contributor.password_hash = hash_password(new)
+    db.session.commit()
+    flash('Password changed successfully.', 'success')
+    return redirect(url_for('contributor_dashboard'))
 
 # ---------- Create Super Admin ----------
 @app.route('/create_super_admin')
