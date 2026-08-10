@@ -48,7 +48,7 @@
     </form>
 </div>
 
-<!-- Chart Section -->
+<!-- Chart -->
 <div class="glass p-4 mb-4">
     <h4 class="mb-3"><i class="fas fa-chart-line text-gold me-2"></i>Contribution Trends</h4>
     <canvas id="contributionChart" height="100"></canvas>
@@ -141,7 +141,6 @@
         });
     });
 
-    // Chart.js
     {% if events.items %}
     const ctx = document.getElementById('contributionChart').getContext('2d');
     new Chart(ctx, {
