@@ -26,6 +26,7 @@ import bcrypt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
+import openai
 import requests
 
 from forms import *
@@ -301,6 +302,29 @@ class Announcement(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
+
+# ---------- Chat Models ----------
+class ChatConversation(db.Model):
+    __tablename__ = 'chat_conversation'
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('admin.id', ondelete='CASCADE'), nullable=True)
+    contributor_id = db.Column(db.Integer, db.ForeignKey('contributor.id', ondelete='CASCADE'), nullable=True)
+    subject = db.Column(db.String(200), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (Index('idx_chat_conversation_admin', 'admin_id'), Index('idx_chat_conversation_contributor', 'contributor_id'),)
+
+class ChatMessage(db.Model):
+    __tablename__ = 'chat_message'
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('chat_conversation.id', ondelete='CASCADE'))
+    sender_type = db.Column(db.String(20), nullable=False)  # 'admin' or 'contributor'
+    sender_id = db.Column(db.Integer, nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (Index('idx_chat_message_conversation', 'conversation_id'), Index('idx_chat_message_created', 'created_at'),)
 
 # ---------- Security Helper Functions ----------
 def is_account_locked_admin(admin):
@@ -739,7 +763,6 @@ def super_dashboard():
         total_fees = get_global_total_fees()
         pending_withdrawals = Withdrawal.query.filter_by(status=STATUS_PENDING).count()
         
-        # Get all admins with their event counts
         admins = Admin.query.all()
         admin_list = []
         for a in admins:
@@ -757,7 +780,6 @@ def super_dashboard():
             (Announcement.expires_at > datetime.utcnow()) | (Announcement.expires_at.is_(None))
         ).order_by(desc(Announcement.created_at)).all()
         
-        # Completed events (target reached)
         all_events = Event.query.filter_by(is_active=True).all()
         completed_events = []
         for event in all_events:
@@ -876,30 +898,41 @@ def create_event():
         
         form = EventForm()
         events_count = Event.query.filter_by(admin_id=admin.id).count()
+        
         if form.validate_on_submit():
             token = generate_unique_token()
             while Event.query.filter_by(token=token).first():
                 token = generate_unique_token()
             
+            # Handle picture upload
             picture_path = None
             if form.picture.data:
-                file = form.picture.data
-                filename = f"event_{token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
-                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
-                os.makedirs(upload_dir, exist_ok=True)
-                file_path = os.path.join(upload_dir, filename)
-                file.save(file_path)
-                picture_path = f'/static/uploads/events/{filename}'
+                try:
+                    file = form.picture.data
+                    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                    filename = f"event_{token}_{int(datetime.utcnow().timestamp())}.{ext}"
+                    upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    file_path = os.path.join(upload_dir, filename)
+                    file.save(file_path)
+                    picture_path = f'/static/uploads/events/{filename}'
+                except Exception as e:
+                    logger.error(f"Picture upload error: {e}")
 
+            # Handle background image upload
             bg_path = None
             if form.background_image.data:
-                file = form.background_image.data
-                filename = f"bg_{token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
-                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
-                os.makedirs(upload_dir, exist_ok=True)
-                file_path = os.path.join(upload_dir, filename)
-                file.save(file_path)
-                bg_path = f'/static/uploads/events/{filename}'
+                try:
+                    file = form.background_image.data
+                    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                    filename = f"bg_{token}_{int(datetime.utcnow().timestamp())}.{ext}"
+                    upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    file_path = os.path.join(upload_dir, filename)
+                    file.save(file_path)
+                    bg_path = f'/static/uploads/events/{filename}'
+                except Exception as e:
+                    logger.error(f"Background upload error: {e}")
 
             event = Event(
                 token=token,
@@ -913,14 +946,14 @@ def create_event():
                 picture_url=picture_path,
                 background_image_url=bg_path,
                 account_name=form.account_name.data,
-                paybill=form.paybill.data,
-                mpesa_number=form.mpesa_number.data,
-                till_number=form.till_number.data,
-                bank_name=form.bank_name.data,
-                bank_account_name=form.bank_account_name.data,
-                bank_account_number=form.bank_account_number.data,
-                payment_instructions=form.payment_instructions.data,
-                whatsapp_contact=form.whatsapp_contact.data,
+                paybill=form.paybill.data or '',
+                mpesa_number=form.mpesa_number.data or '',
+                till_number=form.till_number.data or '',
+                bank_name=form.bank_name.data or '',
+                bank_account_name=form.bank_account_name.data or '',
+                bank_account_number=form.bank_account_number.data or '',
+                payment_instructions=form.payment_instructions.data or '',
+                whatsapp_contact=form.whatsapp_contact.data or '',
                 grace_period=int(form.grace_period.data or 0),
                 has_grace_period=bool(form.grace_period.data and form.grace_period.data > 0),
                 last_activity=datetime.utcnow(),
@@ -928,12 +961,19 @@ def create_event():
             )
             db.session.add(event)
             db.session.commit()
-            flash('Event created successfully!', 'success')
+            flash('Event created successfully! 🎉', 'success')
             return redirect(url_for('dashboard'))
+        
+        if form.errors:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'{field}: {error}', 'error')
+        
         return render_template('create_event.html', form=form, events_count=events_count)
+        
     except Exception as e:
         logger.error(f"Create event error: {e}")
-        flash('An error occurred creating the event.', 'error')
+        flash(f'An error occurred: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
 @app.route('/events/<token>')
@@ -970,23 +1010,31 @@ def edit_event(token):
     if form.validate_on_submit():
         picture_path = event.picture_url
         if form.picture.data:
-            file = form.picture.data
-            filename = f"event_{event.token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
-            upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            file.save(file_path)
-            picture_path = f'/static/uploads/events/{filename}'
+            try:
+                file = form.picture.data
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                filename = f"event_{event.token}_{int(datetime.utcnow().timestamp())}.{ext}"
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, filename)
+                file.save(file_path)
+                picture_path = f'/static/uploads/events/{filename}'
+            except Exception as e:
+                logger.error(f"Picture upload error: {e}")
 
         bg_path = event.background_image_url
         if form.background_image.data:
-            file = form.background_image.data
-            filename = f"bg_{event.token}_{int(datetime.utcnow().timestamp())}_{file.filename}"
-            upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, filename)
-            file.save(file_path)
-            bg_path = f'/static/uploads/events/{filename}'
+            try:
+                file = form.background_image.data
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+                filename = f"bg_{event.token}_{int(datetime.utcnow().timestamp())}.{ext}"
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads', 'events')
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, filename)
+                file.save(file_path)
+                bg_path = f'/static/uploads/events/{filename}'
+            except Exception as e:
+                logger.error(f"Background upload error: {e}")
 
         form.populate_obj(event)
         event.picture_url = picture_path
@@ -1557,93 +1605,251 @@ def chat():
         recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
         recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
 
-        def escalate_to_support_in_app(question):
+        # Check if user wants human support
+        human_keywords = ['human', 'agent', 'support', 'talk to', 'contact support', 'speak to', 'real person', 'customer service']
+        if any(keyword in user_message.lower() for keyword in human_keywords):
             super_admins_list = Admin.query.filter_by(is_super_admin=True).all()
             for sa in super_admins_list:
                 create_notification(
                     sa.id,
-                    f"🤖 AI support request from {admin_name}: {question[:100]}{'...' if len(question) > 100 else ''}",
-                    'support'
+                    f"👤 Human support requested by {admin_name}: {user_message[:100]}{'...' if len(user_message) > 100 else ''}",
+                    'human_support'
                 )
-            return "✅ Your question has been sent to the support team via in-app notifications. Check your bell icon for updates."
+            return jsonify({'response': "👤 A human support agent has been notified. They will reach out to you shortly. Please check your notifications for updates."})
 
-        # Check if it's a platform-related question
-        platform_keywords = ['event', 'contribution', 'fee', 'admin', 'raised', 'pending', 'approval', 'withdraw', 'referral', 'goldenvow']
-        is_platform_question = any(keyword in user_message.lower() for keyword in platform_keywords)
-
-        # Answer platform questions
-        if is_platform_question:
-            msg_lower = user_message.lower()
-            if 'event' in msg_lower and ('count' in msg_lower or 'many' in msg_lower or 'total' in msg_lower):
-                return jsonify({'response': f"📊 You currently have **{total_events}** events on the platform."})
-            if 'raised' in msg_lower or 'total raised' in msg_lower or 'collected' in msg_lower:
-                return jsonify({'response': f"💰 Total contributions raised: **KES {total_raised:,.2f}**."})
-            if 'pending' in msg_lower or 'approval' in msg_lower:
-                return jsonify({'response': f"⏳ There are **{pending_contributions}** pending contribution approvals."})
-            if 'fee' in msg_lower or 'fees' in msg_lower:
-                return jsonify({'response': f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."})
-            if 'admin' in msg_lower:
-                if 'active' in msg_lower:
-                    return jsonify({'response': f"👥 There are **{active_admins}** active admins, of which **{super_admins}** are super admins."})
-                return jsonify({'response': f"👥 Total admins: **{active_admins}** active, **{super_admins}** super admins."})
-            if 'recent' in msg_lower or 'latest' in msg_lower:
-                if recent_events_text:
-                    return jsonify({'response': f"📅 Recent events:\n{recent_events_text}"})
-                return jsonify({'response': "No recent events found."})
-            if 'help' in msg_lower or 'guide' in msg_lower or 'how' in msg_lower:
-                return jsonify({'response': """📖 **Quick Guide**
-1. **Create an event** – click "Create Event" and fill the details.
-2. **Add contributors** – under the event, click "Manage" → "Add Contributor".
-3. **Approve contributions** – when a contributor submits proof, review and click "Approve".
-4. **Withdraw fees** – as super admin, go to Withdrawals → Request.
-5. **Lock page** – if you want to disable contributions, use the "Lock Page" button.
-For more, visit the Help page."""})
-            if 'hello' in msg_lower or 'hi' in msg_lower or 'hey' in msg_lower:
-                return jsonify({'response': "👋 Hello! I'm your GoldenVow assistant. Ask me about events, contributions, fees, or how to do things."})
-
-        # For general questions, try OpenAI API if available
+        # Try OpenAI API
         if OPENAI_API_KEY:
             try:
-                response = requests.post(
-                    'https://api.openai.com/v1/chat/completions',
-                    headers={
-                        'Authorization': f'Bearer {OPENAI_API_KEY}',
-                        'Content-Type': 'application/json'
-                    },
-                    json={
-                        'model': 'gpt-3.5-turbo',
-                        'messages': [
-                            {'role': 'system', 'content': 'You are a helpful assistant. Answer the user\'s question concisely and helpfully.'},
-                            {'role': 'user', 'content': user_message}
-                        ],
-                        'max_tokens': 300,
-                        'temperature': 0.7
-                    },
-                    timeout=10
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                
+                system_prompt = f"""You are GoldenVow AI, a helpful assistant for the GoldenVow fundraising platform.
+You have access to the following live platform data:
+- Total events: {total_events}
+- Total raised: KES {total_raised:,.2f}
+- Pending approvals: {pending_contributions}
+- Total fees: KES {total_fees:,.2f}
+- Active admins: {active_admins}
+- Super admins: {super_admins}
+- Recent events: {recent_events_text}
+
+Your job is to answer ANY question the user asks.
+- If they ask about the platform, use the live data above.
+- If they ask general questions, answer directly from your knowledge.
+- If you don't know something, say so and offer to escalate to a human.
+- Always be helpful, concise, and friendly.
+
+Answer the user's question naturally and helpfully."""
+                
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
                 )
-                if response.status_code == 200:
-                    data = response.json()
-                    ai_response = data['choices'][0]['message']['content']
-                    return jsonify({'response': ai_response})
+                
+                ai_response = response.choices[0].message.content
+                return jsonify({'response': ai_response})
+                
             except Exception as e:
-                logger.warning(f"OpenAI API error: {e}")
+                logger.error(f"OpenAI API error: {e}")
 
-        # Fallback response
-        fallback_response = """I'm a specialized assistant for GoldenVow – a fundraising platform. I can help you with:
-- Event statistics and management
-- Contribution tracking and approvals
-- Fee calculations and withdrawals
-- Platform guidance and troubleshooting
+        # Fallback responses
+        msg_lower = user_message.lower()
+        if 'event' in msg_lower and ('count' in msg_lower or 'many' in msg_lower or 'total' in msg_lower):
+            return jsonify({'response': f"📊 You currently have **{total_events}** events on the platform."})
+        if 'raised' in msg_lower or 'total raised' in msg_lower or 'collected' in msg_lower:
+            return jsonify({'response': f"💰 Total contributions raised: **KES {total_raised:,.2f}**."})
+        if 'pending' in msg_lower or 'approval' in msg_lower:
+            return jsonify({'response': f"⏳ There are **{pending_contributions}** pending contribution approvals."})
+        if 'fee' in msg_lower or 'fees' in msg_lower:
+            return jsonify({'response': f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."})
+        if 'hello' in msg_lower or 'hi' in msg_lower or 'hey' in msg_lower:
+            return jsonify({'response': "👋 Hello! I'm your GoldenVow AI assistant. I can answer ANY question you have – about the platform or general knowledge. Just ask!"})
 
-For general knowledge questions, I recommend checking Google or other sources. I'm here to help with your fundraising needs! 😊
+        fallback_response = """I'm your GoldenVow AI assistant. I can answer questions about:
+- Platform statistics (events, contributions, fees)
+- General knowledge questions
+- How to use the platform
 
-If you need human support, I can escalate your question to the support team."""
+I'm powered by AI, so feel free to ask me anything! If I can't answer, I'll let you know.
+
+To talk to a human, just say "talk to a human" or "contact support"."""
         
         return jsonify({'response': fallback_response})
 
     except Exception as e:
         logger.error(f"AI Chat error: {e}")
         return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
+
+# ---------- Chat Routes ----------
+@app.route('/chat/start', methods=['POST'])
+@admin_login_required
+def start_chat():
+    admin_id = request.form.get('admin_id')
+    contributor_id = request.form.get('contributor_id')
+    subject = request.form.get('subject', 'Support Request')
+    
+    if not admin_id and not contributor_id:
+        flash('Please select a recipient.', 'error')
+        return redirect(url_for('contact_messages'))
+    
+    conversation = ChatConversation.query.filter_by(
+        admin_id=admin_id if admin_id else None,
+        contributor_id=contributor_id if contributor_id else None,
+        is_active=True
+    ).first()
+    
+    if not conversation:
+        conversation = ChatConversation(
+            admin_id=admin_id if admin_id else None,
+            contributor_id=contributor_id if contributor_id else None,
+            subject=subject
+        )
+        db.session.add(conversation)
+        db.session.commit()
+    
+    return redirect(url_for('view_chat', conv_id=conversation.id))
+
+@app.route('/chat/<int:conv_id>')
+@admin_login_required
+def view_chat(conv_id):
+    conversation = ChatConversation.query.get_or_404(conv_id)
+    admin = Admin.query.get(session['admin_id'])
+    
+    if conversation.admin_id and conversation.admin_id != admin.id and not admin.is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    messages = ChatMessage.query.filter_by(conversation_id=conv_id).order_by(ChatMessage.created_at).all()
+    return render_template('chat_view.html', conversation=conversation, messages=messages)
+
+@app.route('/chat/<int:conv_id>/send', methods=['POST'])
+def send_chat_message(conv_id):
+    conversation = ChatConversation.query.get_or_404(conv_id)
+    message = request.form.get('message', '').strip()
+    sender_type = request.form.get('sender_type', 'admin')
+    
+    if not message:
+        flash('Message cannot be empty.', 'error')
+        return redirect(url_for('view_chat', conv_id=conv_id))
+    
+    if sender_type == 'admin':
+        if not session.get('admin_id'):
+            flash('Please log in as admin.', 'error')
+            return redirect(url_for('login'))
+        sender_id = session['admin_id']
+    else:
+        if not session.get('contributor_id'):
+            flash('Please log in as contributor.', 'error')
+            return redirect(url_for('contributor_login'))
+        sender_id = session['contributor_id']
+    
+    chat_msg = ChatMessage(
+        conversation_id=conv_id,
+        sender_type=sender_type,
+        sender_id=sender_id,
+        message=message
+    )
+    db.session.add(chat_msg)
+    conversation.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    if sender_type == 'admin':
+        if conversation.admin_id:
+            create_notification(
+                conversation.admin_id,
+                f"New chat message from {conversation.admin.username if conversation.admin else 'Admin'}",
+                'chat'
+            )
+    else:
+        if conversation.admin_id:
+            create_notification(
+                conversation.admin_id,
+                f"New chat message from contributor {conversation.contributor.name if conversation.contributor else 'User'}",
+                'chat'
+            )
+        else:
+            super_admins = Admin.query.filter_by(is_super_admin=True).all()
+            for sa in super_admins:
+                create_notification(
+                    sa.id,
+                    f"New chat message from contributor {conversation.contributor.name if conversation.contributor else 'User'}",
+                    'chat'
+                )
+    
+    return redirect(url_for('view_chat', conv_id=conv_id))
+
+@app.route('/chat/start-with-admin', methods=['POST'])
+@contributor_login_required
+def start_chat_with_admin():
+    contributor = Contributor.query.get(session['contributor_id'])
+    subject = request.form.get('subject', 'Support Request')
+    admin_id = request.form.get('admin_id')
+    
+    if not admin_id:
+        conversation = ChatConversation(
+            contributor_id=contributor.id,
+            subject=subject,
+            admin_id=None
+        )
+        db.session.add(conversation)
+        db.session.commit()
+        
+        super_admins = Admin.query.filter_by(is_super_admin=True).all()
+        for sa in super_admins:
+            create_notification(
+                sa.id,
+                f"New support request from {contributor.name}",
+                'chat'
+            )
+        
+        flash('Your message has been sent to support.', 'success')
+        return redirect(url_for('contributor_chats'))
+    
+    conversation = ChatConversation(
+        contributor_id=contributor.id,
+        admin_id=admin_id,
+        subject=subject
+    )
+    db.session.add(conversation)
+    db.session.commit()
+    
+    create_notification(
+        admin_id,
+        f"New chat request from {contributor.name}",
+        'chat'
+    )
+    
+    flash('Your message has been sent.', 'success')
+    return redirect(url_for('contributor_chats'))
+
+@app.route('/contributor/chats')
+@contributor_login_required
+def contributor_chats():
+    contributor = Contributor.query.get(session['contributor_id'])
+    conversations = ChatConversation.query.filter_by(
+        contributor_id=contributor.id,
+        is_active=True
+    ).order_by(desc(ChatConversation.updated_at)).all()
+    return render_template('contributor_chats.html', conversations=conversations)
+
+@app.route('/admin/chats')
+@admin_login_required
+def admin_chats():
+    admin = Admin.query.get(session['admin_id'])
+    
+    if admin.is_super_admin:
+        conversations = ChatConversation.query.filter_by(is_active=True).order_by(desc(ChatConversation.updated_at)).all()
+    else:
+        conversations = ChatConversation.query.filter_by(
+            admin_id=admin.id,
+            is_active=True
+        ).order_by(desc(ChatConversation.updated_at)).all()
+    
+    return render_template('admin_chats.html', conversations=conversations)
 
 # ---------- Password Reset Routes ----------
 @app.route('/forgot-password', methods=['GET', 'POST'])
