@@ -63,18 +63,32 @@
         border-color: #ff4444 !important;
         color: #ff6666 !important;
     }
+    .human-request {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 0.5rem;
+    }
+    .human-request a {
+        color: var(--gold);
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="glass p-4">
-            <h2 class="mb-3"><i class="fas fa-robot text-gold me-2"></i>AI Assistant</h2>
-            <p class="text-muted">Ask anything about your platform stats, events, or get guidance.</p>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="mb-0"><i class="fas fa-robot text-gold me-2"></i>AI Assistant</h2>
+                <span class="badge bg-gold text-dark">Powered by AI</span>
+            </div>
+            <p class="text-muted">Ask me ANYTHING – about platform stats, general knowledge, or how to use GoldenVow.</p>
+            
             <div id="chat-box" class="chat-container">
                 <div class="chat-message assistant">
                     <div class="chat-bubble">
-                        👋 Hello! I'm your GoldenVow AI. I can tell you about your events, contributions, fees, and more. What would you like to know?
+                        👋 Hello! I'm your GoldenVow AI. I can answer ANY question you have – about the platform, general knowledge, or how to do things. Just ask!
                     </div>
                 </div>
             </div>
@@ -88,6 +102,9 @@
                     <input type="text" id="message-input" class="form-control" placeholder="Ask me anything..." required>
                     <button type="submit" class="btn btn-gold"><i class="fas fa-paper-plane"></i></button>
                 </form>
+                <div class="human-request mt-2">
+                    Need a human? <a onclick="requestHuman()">Click here to request a human agent</a>
+                </div>
             </div>
         </div>
     </div>
@@ -107,6 +124,30 @@
         div.appendChild(bubble);
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function requestHuman() {
+        addMessage("👤 Requesting human support...", 'user');
+        input.value = '';
+        typing.style.display = 'flex';
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: 'I need to talk to a human agent please'})
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            typing.style.display = 'none';
+            if (data.error) {
+                addMessage('⚠️ ' + data.error, 'assistant', true);
+            } else {
+                addMessage(data.response, 'assistant');
+            }
+        })
+        .catch(err => {
+            typing.style.display = 'none';
+            addMessage('⚠️ Network error. Please try again.', 'assistant', true);
+        });
     }
 
     form.addEventListener('submit', async (e) => {
