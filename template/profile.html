@@ -1,41 +1,90 @@
 {% extends "base.html" %}
 {% block title %}Profile{% endblock %}
+{% block head %}
+<style>
+    .password-wrapper {
+        position: relative;
+    }
+    .password-wrapper .toggle-password {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: var(--text-muted);
+        background: none;
+        border: none;
+        z-index: 10;
+    }
+    .password-wrapper .toggle-password:hover {
+        color: var(--gold);
+    }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <div class="glass-card p-4">
-            <h3 class="golden-text text-center">👤 My Profile</h3>
+        <div class="glass p-4 p-md-5">
+            <h2 class="text-center mb-4"><i class="fas fa-user-cog text-gold me-2"></i>Your Profile</h2>
+            
             <form method="POST">
+                {{ form.csrf_token }}
+                
                 <div class="mb-3">
-                    <label class="form-label">Username</label>
-                    <input type="text" class="form-control bg-dark text-light" value="{{ admin.username }}" disabled>
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="your@email.com") }}
                 </div>
+                
                 <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" name="email" class="form-control bg-dark text-light" value="{{ admin.email }}">
+                    {{ form.phone.label(class="form-label") }}
+                    {{ form.phone(class="form-control", placeholder="Phone number") }}
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input type="tel" name="phone" class="form-control bg-dark text-light" value="{{ admin.phone or '' }}">
+                
+                <hr class="my-4" style="border-color: var(--glass-border);">
+                <h4 class="mb-3"><i class="fas fa-key text-gold me-2"></i>Change Password</h4>
+                
+                <div class="mb-3 password-wrapper">
+                    {{ form.current_password.label(class="form-label") }}
+                    {{ form.current_password(class="form-control", placeholder="Enter current password") }}
+                    <button type="button" class="toggle-password" onclick="togglePassword(this)">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Your Referral Code</label>
-                    <input type="text" class="form-control bg-dark text-light" value="{{ admin.referral_code }}" disabled>
-                    <small class="text-muted-light">Share this code with new admins to get referral benefits</small>
+                
+                <div class="mb-3 password-wrapper">
+                    {{ form.new_password.label(class="form-label") }}
+                    {{ form.new_password(class="form-control", placeholder="New password (min 8 chars)") }}
+                    <button type="button" class="toggle-password" onclick="togglePassword(this)">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
-                <hr>
-                <h5 class="golden-text">🔑 Change Password</h5>
-                <div class="mb-3">
-                    <label class="form-label">New Password (leave blank to keep current)</label>
-                    <input type="password" name="new_password" class="form-control bg-dark text-light" placeholder="Enter new password">
+                
+                <div class="mb-3 password-wrapper">
+                    {{ form.confirm_password.label(class="form-label") }}
+                    {{ form.confirm_password(class="form-control", placeholder="Confirm new password") }}
+                    <button type="button" class="toggle-password" onclick="togglePassword(this)">
+                        <i class="fas fa-eye"></i>
+                    </button>
                 </div>
-                <button type="submit" class="btn btn-gold w-100">💾 Update Profile</button>
+                
+                <button type="submit" class="btn btn-gold w-100">Update Profile</button>
             </form>
         </div>
     </div>
 </div>
 
-<div class="mt-3 text-center">
-    <a href="{{ url_for('dashboard') if not admin.is_super_admin else url_for('super_dashboard') }}" class="text-muted-light">← Back</a>
-</div>
+<script>
+    function togglePassword(button) {
+        const wrapper = button.closest('.password-wrapper');
+        const input = wrapper.querySelector('input');
+        const icon = button.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.className = 'fas fa-eye-slash';
+        } else {
+            input.type = 'password';
+            icon.className = 'fas fa-eye';
+        }
+    }
+</script>
 {% endblock %}
