@@ -1776,7 +1776,7 @@ def manage_feature_requests():
     return render_template('feature_requests.html')
 
 @app.route('/feature-request', methods=['GET', 'POST'])
-@app.route('/feature-request/<event_token>', methods(['GET', 'POST']))
+@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])  # <-- FIXED
 def submit_feature_request(event_token=None):
     flash('Feature request feature is coming soon.', 'info')
     return redirect(url_for('index'))
