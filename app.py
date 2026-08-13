@@ -6,10 +6,14 @@ import io
 import secrets
 import smtplib
 import logging
+import warnings
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from functools import wraps
+
+# Suppress warnings
+warnings.filterwarnings("ignore", category=Warning)
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
@@ -943,6 +947,26 @@ def about_page():
     """About page"""
     return render_template('about.html')
 
+@app.route('/super/request-payment/<int:event_id>', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def request_payment_from_admin(event_id):
+    event = Event.query.get_or_404(event_id)
+    admin = Admin.query.get(event.admin_id)
+    
+    if not admin:
+        flash('Event has no admin assigned.', 'error')
+        return redirect(url_for('completed_events'))
+    
+    create_notification(
+        admin.id,
+        f"💰 Super admin is requesting payment details for your event '{event.title}'. Please reply with your payment method (M-Pesa, Bank, etc.) via Contact page.",
+        'payment_request'
+    )
+    
+    flash(f'✅ Payment request sent to {admin.username} via in-app notification.', 'success')
+    return redirect(url_for('completed_events'))
+
 # ---------- Continue with remaining routes ----------
 
 @app.route('/events/create', methods=['GET', 'POST'])
@@ -1066,7 +1090,6 @@ def edit_event(token):
     form = EventForm(obj=event)
     
     if form.validate_on_submit():
-        # Handle picture upload
         picture_path = event.picture_url
         if form.picture.data:
             try:
@@ -1081,7 +1104,6 @@ def edit_event(token):
             except Exception as e:
                 logger.error(f"Picture upload error: {e}")
 
-        # Handle background image
         bg_path = event.background_image_url
         if form.background_image.data:
             try:
@@ -1096,7 +1118,6 @@ def edit_event(token):
             except Exception as e:
                 logger.error(f"Background upload error: {e}")
 
-        # Update event manually
         event.title = form.title.data
         event.event_type = form.event_type.data
         event.description = form.description.data
