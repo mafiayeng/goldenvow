@@ -26,6 +26,7 @@ import bcrypt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger  # FIXED: Correct import
 import openai
 import requests
 
