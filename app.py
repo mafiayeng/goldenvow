@@ -26,7 +26,7 @@ import bcrypt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger  # FIXED: Correct import
+from apscheduler.triggers.interval import IntervalTrigger
 import openai
 import requests
 
@@ -891,6 +891,59 @@ def super_dashboard():
         logger.error(f"Super dashboard error: {e}")
         flash('An error occurred loading the super dashboard.', 'error')
         return redirect(url_for('dashboard'))
+
+# ---------- MISSING ROUTES ADDED ----------
+
+@app.route('/completed-events')
+@admin_login_required
+@super_admin_required
+def completed_events():
+    """View all completed events (target reached)"""
+    try:
+        all_events = Event.query.filter_by(is_active=True).all()
+        completed_events_list = []
+        for event in all_events:
+            raised = get_event_total_contributions(event.id)
+            if raised >= event.target_amount and event.target_amount > 0:
+                admin = Admin.query.get(event.admin_id)
+                completed_events_list.append({
+                    'event': event,
+                    'raised': raised,
+                    'fee': get_event_total_fee(event.id),
+                    'admin': admin
+                })
+        return render_template('completed_events.html', completed_events=completed_events_list)
+    except Exception as e:
+        logger.error(f"Completed events error: {e}")
+        flash('An error occurred loading completed events.', 'error')
+        return redirect(url_for('super_dashboard'))
+
+@app.route('/help')
+def help_page():
+    """Help/FAQ page"""
+    return render_template('help.html')
+
+@app.route('/faq')
+def faq_page():
+    """FAQ page (alias for help)"""
+    return redirect(url_for('help_page'))
+
+@app.route('/terms')
+def terms_page():
+    """Terms and Conditions page"""
+    return render_template('terms.html')
+
+@app.route('/privacy')
+def privacy_page():
+    """Privacy Policy page"""
+    return render_template('privacy.html')
+
+@app.route('/about')
+def about_page():
+    """About page"""
+    return render_template('about.html')
+
+# ---------- Continue with remaining routes ----------
 
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
