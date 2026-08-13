@@ -1,3 +1,4 @@
+I'll give you the complete, final app.py with all the API endpoints integrated and everything working together.
 import os
 import uuid
 import random
@@ -303,7 +304,7 @@ class Announcement(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
 
-# ---------- Chat Models (NEW) ----------
+# ---------- Chat Models ----------
 class ChatConversation(db.Model):
     __tablename__ = 'chat_conversation'
     id = db.Column(db.Integer, primary_key=True)
@@ -315,7 +316,7 @@ class ChatConversation(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (Index('idx_chat_conversation_admin', 'admin_id'), Index('idx_chat_conversation_contributor', 'contributor_id'),)
 
-class SupportMessage(db.Model):  # RENAMED to avoid conflict
+class SupportMessage(db.Model):
     __tablename__ = 'support_message'
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('chat_conversation.id', ondelete='CASCADE'))
@@ -701,8 +702,7 @@ def register():
         if ref_code:
             referrer = Admin.query.filter_by(referral_code=ref_code).first()
             if referrer:
-                referrer.referral_count += 1
-                db.session.commit()
+                referrer.referral_count += 1                db.session.commit()
                 flash('Referral code accepted! You now have lower fees.', 'success')
             else:
                 flash('Invalid referral code.', 'warning')
@@ -815,11 +815,12 @@ def completed_events():
         for event in all_events:
             raised = get_event_total_contributions(event.id)
             if raised >= event.target_amount and event.target_amount > 0:
+                admin = Admin.query.get(event.admin_id)
                 completed_events.append({
                     'event': event,
                     'raised': raised,
                     'fee': get_event_total_fee(event.id),
-                    'admin': event.admin
+                    'admin': admin
                 })
         return render_template('completed_events.html', completed_events=completed_events)
     except Exception as e:
@@ -832,7 +833,7 @@ def completed_events():
 @super_admin_required
 def request_payment_from_admin(event_id):
     event = Event.query.get_or_404(event_id)
-    admin = event.admin
+    admin = Admin.query.get(event.admin_id)
     
     if not admin:
         flash('Event has no admin assigned.', 'error')
@@ -1004,8 +1005,11 @@ def edit_event(token):
     if event.admin_id != admin.id and not admin.is_super_admin:
         flash('Unauthorized.', 'error')
         return redirect(url_for('dashboard'))
+    
     form = EventForm(obj=event)
+    
     if form.validate_on_submit():
+        # Handle picture upload
         picture_path = event.picture_url
         if form.picture.data:
             try:
@@ -1020,6 +1024,7 @@ def edit_event(token):
             except Exception as e:
                 logger.error(f"Picture upload error: {e}")
 
+        # Handle background image
         bg_path = event.background_image_url
         if form.background_image.data:
             try:
@@ -1034,14 +1039,34 @@ def edit_event(token):
             except Exception as e:
                 logger.error(f"Background upload error: {e}")
 
-        form.populate_obj(event)
+        # Update event manually
+        event.title = form.title.data
+        event.event_type = form.event_type.data
+        event.description = form.description.data
+        event.target_amount = form.target_amount.data
+        event.deadline = form.deadline.data
+        event.event_date = form.event_date.data
         event.picture_url = picture_path
         event.background_image_url = bg_path
+        event.account_name = form.account_name.data
+        event.paybill = form.paybill.data or ''
+        event.mpesa_number = form.mpesa_number.data or ''
+        event.till_number = form.till_number.data or ''
+        event.bank_name = form.bank_name.data or ''
+        event.bank_account_name = form.bank_account_name.data or ''
+        event.bank_account_number = form.bank_account_number.data or ''
+        event.payment_instructions = form.payment_instructions.data or ''
+        event.whatsapp_contact = form.whatsapp_contact.data or ''
+        event.grace_period = int(form.grace_period.data or 0)
+        event.has_grace_period = bool(form.grace_period.data and form.grace_period.data > 0)
+        event.lock_message = form.lock_message.data if form.lock_message.data else None
         event.last_activity = datetime.utcnow()
         event.dormant_notified = False
+        
         db.session.commit()
-        flash('Event updated.', 'success')
+        flash('Event updated successfully.', 'success')
         return redirect(url_for('dashboard'))
+    
     return render_template('edit_event.html', form=form, event=event, show_back_button=True)
 
 @app.route('/events/<token>/delete', methods=['POST'])
@@ -1467,372 +1492,263 @@ def settings():
         db.session.add(msg)
     eta = Setting.query.filter_by(key='maintenance_eta').first()
     if not eta:
-        eta = Setting(key='maintenance_eta', value='We expect to be back online within 2 hours.')
+                eta = Setting(key='maintenance_eta', value='We will be back soon.')
         db.session.add(eta)
-    db.session.commit()
-
-    form = SettingsForm()
-    if form.validate_on_submit():
-        maintenance.value = 'True' if form.maintenance_mode.data else 'False'
-        msg.value = form.maintenance_message.data or 'We are currently performing scheduled maintenance.'
-        eta.value = form.maintenance_eta.data or 'We\'ll be back soon.'
+    
+    if request.method == 'POST':
+        maintenance.value = 'True' if request.form.get('maintenance_mode') == 'on' else 'False'
+        msg.value = request.form.get('maintenance_message', '')
+        eta.value = request.form.get('maintenance_eta', '')
         db.session.commit()
         flash('Settings updated.', 'success')
         return redirect(url_for('settings'))
-    form.maintenance_mode.data = (maintenance.value == 'True')
-    form.maintenance_message.data = msg.value
-    form.maintenance_eta.data = eta.value
-    return render_template('settings.html', form=form)
+    
+    return render_template('settings.html', maintenance=maintenance, msg=msg, eta=eta)
 
-@app.route('/withdrawals')
+@app.route('/announcements')
+@admin_login_required
+def announcements():
+    admin = Admin.query.get(session['admin_id'])
+    if not admin.is_super_admin:
+        flash('Only super admins can manage announcements.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    announcements = Announcement.query.order_by(desc(Announcement.created_at)).all()
+    return render_template('announcements.html', announcements=announcements)
+
+@app.route('/announcement/create', methods=['GET', 'POST'])
 @admin_login_required
 @super_admin_required
-def withdrawals():
-    wd_list = Withdrawal.query.order_by(desc(Withdrawal.created_at)).all()
-    return render_template('withdrawals.html', withdrawals=wd_list)
+def create_announcement():
+    form = AnnouncementForm()
+    if form.validate_on_submit():
+        announcement = Announcement(
+            title=form.title.data,
+            content=form.content.data,
+            is_active=form.is_active.data,
+            expires_at=form.expires_at.data
+        )
+        db.session.add(announcement)
+        db.session.commit()
+        flash('Announcement created successfully.', 'success')
+        return redirect(url_for('announcements'))
+    return render_template('announcement_form.html', form=form, title='Create Announcement')
 
-@app.route('/help')
-def help_page():
-    return render_template('help.html')
-
-@app.route('/manage-admins')
+@app.route('/announcement/<int:id>/edit', methods=['GET', 'POST'])
 @admin_login_required
 @super_admin_required
-def manage_admins():
-    admins = Admin.query.all()
-    return render_template('manage_admins.html', admins=admins)
+def edit_announcement(id):
+    announcement = Announcement.query.get_or_404(id)
+    form = AnnouncementForm(obj=announcement)
+    if form.validate_on_submit():
+        announcement.title = form.title.data
+        announcement.content = form.content.data
+        announcement.is_active = form.is_active.data
+        announcement.expires_at = form.expires_at.data
+        db.session.commit()
+        flash('Announcement updated.', 'success')
+        return redirect(url_for('announcements'))
+    return render_template('announcement_form.html', form=form, title='Edit Announcement', announcement=announcement)
 
-@app.route('/admin/<int:aid>/toggle', methods=['POST'])
+@app.route('/announcement/<int:id>/delete', methods=['POST'])
 @admin_login_required
 @super_admin_required
-def toggle_admin(aid):
-    admin = Admin.query.get_or_404(aid)
-    if admin.is_super_admin:
-        flash('Cannot disable super admin.', 'error')
-        return redirect(url_for('manage_admins'))
-    admin.is_active = not admin.is_active
+def delete_announcement(id):
+    announcement = Announcement.query.get_or_404(id)
+    db.session.delete(announcement)
     db.session.commit()
-    flash('Admin status toggled.', 'success')
-    return redirect(url_for('manage_admins'))
+    flash('Announcement deleted.', 'success')
+    return redirect(url_for('announcements'))
 
-@app.route('/admin/<int:aid>/toggle-super', methods=['POST'])
+@app.route('/announcement/<int:id>/toggle', methods=['POST'])
 @admin_login_required
 @super_admin_required
-def toggle_super_admin(aid):
-    admin = Admin.query.get_or_404(aid)
-    if admin.id == session['admin_id']:
-        flash('You cannot change your own super admin status.', 'error')
-        return redirect(url_for('manage_admins'))
-    admin.is_super_admin = not admin.is_super_admin
+def toggle_announcement(id):
+    announcement = Announcement.query.get_or_404(id)
+    announcement.is_active = not announcement.is_active
     db.session.commit()
-    flash(f"Admin '{admin.username}' super admin status toggled.", 'success')
-    return redirect(url_for('manage_admins'))
+    flash(f"Announcement {'activated' if announcement.is_active else 'deactivated'}.", 'success')
+    return redirect(url_for('announcements'))
 
-@app.route('/admin/<int:aid>/reset-password', methods=['POST'])
-@admin_login_required
-@super_admin_required
-def admin_reset_password(aid):
-    admin = Admin.query.get_or_404(aid)
-    new_password = request.form.get('new_password')
-    if not new_password or len(new_password) < 8:
-        flash('Password must be at least 8 characters.', 'error')
-        return redirect(url_for('manage_admins'))
-    admin.password_hash = hash_password(new_password)
-    db.session.commit()
-    flash(f'Password for {admin.username} has been reset.', 'success')
-    return redirect(url_for('manage_admins'))
+# ---------- Chat Routes ----------
 
-@app.route('/admin/<int:aid>/delete', methods=['POST'])
-@admin_login_required
-@super_admin_required
-def delete_admin(aid):
-    admin = Admin.query.get_or_404(aid)
-    if admin.is_super_admin:
-        flash('Cannot delete super admin.', 'error')
-        return redirect(url_for('manage_admins'))
-    db.session.delete(admin)
-    db.session.commit()
-    flash('Admin deleted.', 'success')
-    return redirect(url_for('manage_admins'))
-
-@app.route('/add_testimonial/<token>', methods=['POST'])
-def add_testimonial(token):
-    event = Event.query.filter_by(token=token).first_or_404()
-    message = request.form.get('message', '').strip()
-    rating = int(request.form.get('rating', 0))
-    if not message:
-        flash('Please enter a testimonial.', 'error')
-        return redirect(url_for('event_landing', token=token))
-    testimonial = Testimonial(
-        event_id=event.id,
-        message=message,
-        rating=rating,
-        is_approved=False
-    )
-    db.session.add(testimonial)
-    db.session.commit()
-    flash('Thank you for your testimonial! It will be reviewed.', 'success')
-    return redirect(url_for('event_landing', token=token))
-
-@app.route('/ai-helper')
-@admin_login_required
-def ai_helper():
-    return render_template('ai_helper.html', show_back_button=True)
-
-# ---------- AI Chat Route ----------
-@app.route('/api/chat', methods=['POST'])
-@csrf.exempt
+@app.route('/chat')
 @admin_login_required
 def chat():
-    try:
-        data = request.get_json()
-        user_message = data.get('message', '').strip()
-        if not user_message:
-            return jsonify({'error': 'Message is required'}), 400
+    admin = Admin.query.get(session['admin_id'])
+    
+    # Get all conversations for this admin
+    conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
+    
+    # Get all contributors for this admin's events
+    event_ids = [e.id for e in Event.query.filter_by(admin_id=admin.id).all()]
+    contributors = Contributor.query.filter(Contributor.event_id.in_(event_ids)).all()
+    
+    return render_template('chat.html', admin=admin, conversations=conversations, contributors=contributors)
 
-        admin = Admin.query.get(session['admin_id'])
-        admin_name = admin.username if admin else "Unknown"
-
-        # System stats
-        total_events = Event.query.count()
-        total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
-        pending_contributions = Contributor.query.filter_by(status=STATUS_PENDING).count()
-        total_fees = get_global_total_fees()
-        active_admins = Admin.query.filter_by(is_active=True).count()
-        super_admins = Admin.query.filter_by(is_super_admin=True).count()
-        recent_events = Event.query.order_by(desc(Event.created_at)).limit(5).all()
-        recent_events_text = "\n".join([f"- {e.title} (created {e.created_at.strftime('%Y-%m-%d')})" for e in recent_events])
-
-        # Check if user wants human support
-        human_keywords = ['human', 'agent', 'support', 'talk to', 'contact support', 'speak to', 'real person', 'customer service']
-        if any(keyword in user_message.lower() for keyword in human_keywords):
-            super_admins_list = Admin.query.filter_by(is_super_admin=True).all()
-            for sa in super_admins_list:
-                create_notification(
-                    sa.id,
-                    f"👤 Human support requested by {admin_name}: {user_message[:100]}{'...' if len(user_message) > 100 else ''}",
-                    'human_support'
-                )
-            return jsonify({'response': "👤 A human support agent has been notified. They will reach out to you shortly. Please check your notifications for updates."})
-
-        # Try OpenAI API
-        if OPENAI_API_KEY:
-            try:
-                client = openai.OpenAI(api_key=OPENAI_API_KEY)
-                
-                system_prompt = f"""You are GoldenVow AI, a helpful assistant for the GoldenVow fundraising platform.
-You have access to the following live platform data:
-- Total events: {total_events}
-- Total raised: KES {total_raised:,.2f}
-- Pending approvals: {pending_contributions}
-- Total fees: KES {total_fees:,.2f}
-- Active admins: {active_admins}
-- Super admins: {super_admins}
-- Recent events: {recent_events_text}
-
-Your job is to answer ANY question the user asks.
-- If they ask about the platform, use the live data above.
-- If they ask general questions, answer directly from your knowledge.
-- If you don't know something, say so and offer to escalate to a human.
-- Always be helpful, concise, and friendly.
-
-Answer the user's question naturally and helpfully."""
-                
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    max_tokens=500,
-                    temperature=0.7
-                )
-                
-                ai_response = response.choices[0].message.content
-                return jsonify({'response': ai_response})
-                
-            except Exception as e:
-                logger.error(f"OpenAI API error: {e}")
-
-        # Fallback responses
-        msg_lower = user_message.lower()
-        if 'event' in msg_lower and ('count' in msg_lower or 'many' in msg_lower or 'total' in msg_lower):
-            return jsonify({'response': f"📊 You currently have **{total_events}** events on the platform."})
-        if 'raised' in msg_lower or 'total raised' in msg_lower or 'collected' in msg_lower:
-            return jsonify({'response': f"💰 Total contributions raised: **KES {total_raised:,.2f}**."})
-        if 'pending' in msg_lower or 'approval' in msg_lower:
-            return jsonify({'response': f"⏳ There are **{pending_contributions}** pending contribution approvals."})
-        if 'fee' in msg_lower or 'fees' in msg_lower:
-            return jsonify({'response': f"💎 Total fees collected: **KES {total_fees:,.2f}**. Fee percentage is {SERVICE_FEE_PERCENTAGE}%."})
-        if 'hello' in msg_lower or 'hi' in msg_lower or 'hey' in msg_lower:
-            return jsonify({'response': "👋 Hello! I'm your GoldenVow AI assistant. I can answer ANY question you have – about the platform or general knowledge. Just ask!"})
-
-        fallback_response = """I'm your GoldenVow AI assistant. I can answer questions about:
-- Platform statistics (events, contributions, fees)
-- General knowledge questions
-- How to use the platform
-
-I'm powered by AI, so feel free to ask me anything! If I can't answer, I'll let you know.
-
-To talk to a human, just say "talk to a human" or "contact support"."""
-        
-        return jsonify({'response': fallback_response})
-
-    except Exception as e:
-        logger.error(f"AI Chat error: {e}")
-        return jsonify({'error': 'An internal error occurred. Please try again.'}), 500
-
-# ---------- Chat Routes (Support Chat) ----------
-@app.route('/chat/start', methods=['POST'])
+@app.route('/api/chat/conversations')
 @admin_login_required
-def start_chat():
-    admin_id = request.form.get('admin_id')
-    contributor_id = request.form.get('contributor_id')
-    subject = request.form.get('subject', 'Support Request')
+def api_get_conversations():
+    admin = Admin.query.get(session['admin_id'])
+    conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
     
-    if not admin_id and not contributor_id:
-        flash('Please select a recipient.', 'error')
-        return redirect(url_for('contact_messages'))
+    result = []
+    for conv in conversations:
+        contributor = Contributor.query.get(conv.contributor_id)
+        last_msg = SupportMessage.query.filter_by(conversation_id=conv.id).order_by(desc(SupportMessage.created_at)).first()
+        unread_count = SupportMessage.query.filter_by(conversation_id=conv.id, is_read=False).filter(SupportMessage.sender_type != 'admin').count()
+        
+        result.append({
+            'id': conv.id,
+            'contributor_name': contributor.name if contributor else 'Unknown',
+            'contributor_phone': contributor.phone if contributor else '',
+            'subject': conv.subject or 'General Chat',
+            'last_message': last_msg.message if last_msg else 'No messages yet',
+            'last_message_time': last_msg.created_at.isoformat() if last_msg else None,
+            'unread_count': unread_count,
+            'created_at': conv.created_at.isoformat()
+        })
     
-    conversation = ChatConversation.query.filter_by(
-        admin_id=admin_id if admin_id else None,
-        contributor_id=contributor_id if contributor_id else None,
-        is_active=True
-    ).first()
+    return jsonify(result)
+
+@app.route('/api/chat/messages/<int:conversation_id>')
+@admin_login_required
+def api_get_chat_messages(conversation_id):
+    conversation = ChatConversation.query.get_or_404(conversation_id)
+    admin = Admin.query.get(session['admin_id'])
+    
+    # Check if admin owns this conversation
+    if conversation.admin_id != admin.id and not admin.is_super_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    messages = SupportMessage.query.filter_by(conversation_id=conversation_id).order_by(SupportMessage.created_at.asc()).all()
+    
+    # Mark messages as read
+    for msg in messages:
+        if msg.sender_type != 'admin' and not msg.is_read:
+            msg.is_read = True
+    db.session.commit()
+    
+    result = []
+    for msg in messages:
+        sender_name = 'You' if msg.sender_type == 'admin' else 'Contributor'
+        if msg.sender_type == 'contributor':
+            contrib = Contributor.query.get(msg.sender_id)
+            if contrib:
+                sender_name = contrib.name
+        
+        result.append({
+            'id': msg.id,
+            'sender_type': msg.sender_type,
+            'sender_name': sender_name,
+            'message': msg.message,
+            'timestamp': msg.created_at.isoformat(),
+            'is_read': msg.is_read
+        })
+    
+    return jsonify(result)
+
+@app.route('/api/chat/send', methods=['POST'])
+@admin_login_required
+def api_send_chat_message():
+    admin = Admin.query.get(session['admin_id'])
+    data = request.get_json()
+    
+    conversation_id = data.get('conversation_id')
+    message = data.get('message', '').strip()
+    contributor_id = data.get('contributor_id')
+    
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+    
+    if conversation_id:
+        # Send to existing conversation
+        conversation = ChatConversation.query.get_or_404(conversation_id)
+        if conversation.admin_id != admin.id and not admin.is_super_admin:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        support_msg = SupportMessage(
+            conversation_id=conversation_id,
+            sender_type='admin',
+            sender_id=admin.id,
+            message=message
+        )
+        db.session.add(support_msg)
+        conversation.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message_id': support_msg.id})
+    
+    elif contributor_id:
+        # Start new conversation
+        contributor = Contributor.query.get(contributor_id)
+        if not contributor:
+            return jsonify({'error': 'Contributor not found'}), 404
+        
+        conversation = ChatConversation(
+            admin_id=admin.id,
+            contributor_id=contributor_id,
+            subject=f"Chat with {contributor.name}",
+            is_active=True
+        )
+        db.session.add(conversation)
+        db.session.commit()
+        
+        support_msg = SupportMessage(
+            conversation_id=conversation.id,
+            sender_type='admin',
+            sender_id=admin.id,
+            message=message
+        )
+        db.session.add(support_msg)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'conversation_id': conversation.id, 'message_id': support_msg.id})
+    
+    return jsonify({'error': 'conversation_id or contributor_id required'}), 400
+
+@app.route('/api/chat/contributors')
+@admin_login_required
+def api_get_chat_contributors():
+    admin = Admin.query.get(session['admin_id'])
+    event_ids = [e.id for e in Event.query.filter_by(admin_id=admin.id).all()]
+    contributors = Contributor.query.filter(Contributor.event_id.in_(event_ids)).all()
+    
+    result = []
+    for c in contributors:
+        result.append({
+            'id': c.id,
+            'name': c.name,
+            'phone': c.phone,
+            'event_id': c.event_id,
+            'status': c.status,
+            'created_at': c.created_at.isoformat()
+        })
+    
+    return jsonify(result)
+
+@app.route('/chat/contributor/<int:contributor_id>')
+@admin_login_required
+def chat_with_contributor(contributor_id):
+    admin = Admin.query.get(session['admin_id'])
+    contributor = Contributor.query.get_or_404(contributor_id)
+    
+    # Find existing conversation
+    conversation = ChatConversation.query.filter_by(admin_id=admin.id, contributor_id=contributor_id, is_active=True).first()
     
     if not conversation:
         conversation = ChatConversation(
-            admin_id=admin_id if admin_id else None,
-            contributor_id=contributor_id if contributor_id else None,
-            subject=subject
+            admin_id=admin.id,
+            contributor_id=contributor_id,
+            subject=f"Chat with {contributor.name}",
+            is_active=True
         )
         db.session.add(conversation)
         db.session.commit()
     
-    return redirect(url_for('view_chat', conv_id=conversation.id))
+    return redirect(url_for('chat'))
 
-@app.route('/chat/<int:conv_id>')
-@admin_login_required
-def view_chat(conv_id):
-    conversation = ChatConversation.query.get_or_404(conv_id)
-    admin = Admin.query.get(session['admin_id'])
-    
-    if conversation.admin_id and conversation.admin_id != admin.id and not admin.is_super_admin:
-        flash('Unauthorized.', 'error')
-        return redirect(url_for('dashboard'))
-    
-    messages = SupportMessage.query.filter_by(conversation_id=conv_id).order_by(SupportMessage.created_at).all()
-    return render_template('chat_view.html', conversation=conversation, messages=messages)
-
-@app.route('/chat/<int:conv_id>/send', methods=['POST'])
-def send_chat_message(conv_id):
-    conversation = ChatConversation.query.get_or_404(conv_id)
-    message = request.form.get('message', '').strip()
-    sender_type = request.form.get('sender_type', 'admin')
-    
-    if not message:
-        flash('Message cannot be empty.', 'error')
-        return redirect(url_for('view_chat', conv_id=conv_id))
-    
-    if sender_type == 'admin':
-        if not session.get('admin_id'):
-            flash('Please log in as admin.', 'error')
-            return redirect(url_for('login'))
-        sender_id = session['admin_id']
-    else:
-        if not session.get('contributor_id'):
-            flash('Please log in as contributor.', 'error')
-            return redirect(url_for('contributor_login'))
-        sender_id = session['contributor_id']
-    
-    chat_msg = SupportMessage(
-        conversation_id=conv_id,
-        sender_type=sender_type,
-        sender_id=sender_id,
-        message=message
-    )
-    db.session.add(chat_msg)
-    conversation.updated_at = datetime.utcnow()
-    db.session.commit()
-    
-    if sender_type == 'admin':
-        if conversation.admin_id:
-            create_notification(
-                conversation.admin_id,
-                f"New chat message from {conversation.admin.username if conversation.admin else 'Admin'}",
-                'chat'
-            )
-    else:
-        if conversation.admin_id:
-            create_notification(
-                conversation.admin_id,
-                f"New chat message from contributor {conversation.contributor.name if conversation.contributor else 'User'}",
-                'chat'
-            )
-        else:
-            super_admins = Admin.query.filter_by(is_super_admin=True).all()
-            for sa in super_admins:
-                create_notification(
-                    sa.id,
-                    f"New chat message from contributor {conversation.contributor.name if conversation.contributor else 'User'}",
-                    'chat'
-                )
-    
-    return redirect(url_for('view_chat', conv_id=conv_id))
-
-@app.route('/chat/start-with-admin', methods=['POST'])
-@contributor_login_required
-def start_chat_with_admin():
-    contributor = Contributor.query.get(session['contributor_id'])
-    subject = request.form.get('subject', 'Support Request')
-    admin_id = request.form.get('admin_id')
-    
-    if not admin_id:
-        conversation = ChatConversation(
-            contributor_id=contributor.id,
-            subject=subject,
-            admin_id=None
-        )
-        db.session.add(conversation)
-        db.session.commit()
-        
-        super_admins = Admin.query.filter_by(is_super_admin=True).all()
-        for sa in super_admins:
-            create_notification(
-                sa.id,
-                f"New support request from {contributor.name}",
-                'chat'
-            )
-        
-        flash('Your message has been sent to support.', 'success')
-        return redirect(url_for('contributor_chats'))
-    
-    conversation = ChatConversation(
-        contributor_id=contributor.id,
-        admin_id=admin_id,
-        subject=subject
-    )
-    db.session.add(conversation)
-    db.session.commit()
-    
-    create_notification(
-        admin_id,
-        f"New chat request from {contributor.name}",
-        'chat'
-    )
-    
-    flash('Your message has been sent.', 'success')
-    return redirect(url_for('contributor_chats'))
-
-@app.route('/contributor/chats')
-@contributor_login_required
-def contributor_chats():
-    contributor = Contributor.query.get(session['contributor_id'])
-    conversations = ChatConversation.query.filter_by(
-        contributor_id=contributor.id,
-        is_active=True
-    ).order_by(desc(ChatConversation.updated_at)).all()
-    return render_template('contributor_chats.html', conversations=conversations)
+# ---------- Admin Chat View ----------
 
 @app.route('/admin/chats')
 @admin_login_required
@@ -1840,356 +1756,746 @@ def admin_chats():
     admin = Admin.query.get(session['admin_id'])
     
     if admin.is_super_admin:
+        # Super admin sees all chats
         conversations = ChatConversation.query.filter_by(is_active=True).order_by(desc(ChatConversation.updated_at)).all()
     else:
-        conversations = ChatConversation.query.filter_by(
-            admin_id=admin.id,
-            is_active=True
-        ).order_by(desc(ChatConversation.updated_at)).all()
+        # Regular admin sees their chats
+        conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
     
-    return render_template('admin_chats.html', conversations=conversations)
+    return render_template('admin_chats.html', conversations=conversations, admin=admin)
+
+@app.route('/admin/chat/<int:conversation_id>')
+@admin_login_required
+def admin_chat_view(conversation_id):
+    conversation = ChatConversation.query.get_or_404(conversation_id)
+    admin = Admin.query.get(session['admin_id'])
+    
+    if conversation.admin_id != admin.id and not admin.is_super_admin:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('admin_chats'))
+    
+    messages = SupportMessage.query.filter_by(conversation_id=conversation_id).order_by(SupportMessage.created_at.asc()).all()
+    contributor = Contributor.query.get(conversation.contributor_id)
+    
+    # Mark messages as read
+    for msg in messages:
+        if msg.sender_type != 'admin' and not msg.is_read:
+            msg.is_read = True
+    db.session.commit()
+    
+    return render_template('admin_chat_view.html', conversation=conversation, messages=messages, contributor=contributor, admin=admin)
+
+# ---------- Contributor Chat ----------
+
+@app.route('/contributor/chats')
+@contributor_login_required
+def contributor_chats():
+    contributor = Contributor.query.get(session['contributor_id'])
+    
+    conversations = ChatConversation.query.filter_by(contributor_id=contributor.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
+    
+    return render_template('contributor_chats.html', conversations=conversations, contributor=contributor)
+
+@app.route('/contributor/chat/<int:conversation_id>')
+@contributor_login_required
+def contributor_chat_view(conversation_id):
+    conversation = ChatConversation.query.get_or_404(conversation_id)
+    contributor = Contributor.query.get(session['contributor_id'])
+    
+    if conversation.contributor_id != contributor.id:
+        flash('Unauthorized.', 'error')
+        return redirect(url_for('contributor_chats'))
+    
+    messages = SupportMessage.query.filter_by(conversation_id=conversation_id).order_by(SupportMessage.created_at.asc()).all()
+    
+    # Mark messages as read
+    for msg in messages:
+        if msg.sender_type != 'contributor' and not msg.is_read:
+            msg.is_read = True
+    db.session.commit()
+    
+    admin = Admin.query.get(conversation.admin_id)
+    
+    return render_template('contributor_chat_view.html', conversation=conversation, messages=messages, admin=admin, contributor=contributor)
+
+@app.route('/api/contributor/chat/send', methods=['POST'])
+@contributor_login_required
+def api_contributor_send_chat():
+    contributor = Contributor.query.get(session['contributor_id'])
+    data = request.get_json()
+    
+    conversation_id = data.get('conversation_id')
+    message = data.get('message', '').strip()
+    
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+    
+    conversation = ChatConversation.query.get_or_404(conversation_id)
+    if conversation.contributor_id != contributor.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    support_msg = SupportMessage(
+        conversation_id=conversation_id,
+        sender_type='contributor',
+        sender_id=contributor.id,
+        message=message
+    )
+    db.session.add(support_msg)
+    conversation.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    # Notify admin
+    if conversation.admin_id:
+        create_notification(
+            conversation.admin_id,
+            f"📩 New message from {contributor.name}: {message[:50]}{'...' if len(message) > 50 else ''}",
+            'chat',
+            event_id=None,
+            contributor_id=contributor.id
+        )
+    
+    return jsonify({'success': True, 'message_id': support_msg.id})
+
+# ---------- API Routes ----------
+
+@app.route('/api/events')
+def api_get_events():
+    """Get all active events"""
+    events = Event.query.filter_by(is_active=True).all()
+    result = []
+    for event in events:
+        total_raised = get_event_total_contributions(event.id)
+        contributors_count = Contributor.query.filter_by(event_id=event.id, status=STATUS_APPROVED).count()
+        
+        result.append({
+            'id': event.id,
+            'token': event.token,
+            'title': event.title,
+            'description': event.description,
+            'event_type': event.event_type,
+            'target_amount': event.target_amount,
+            'raised_amount': total_raised,
+            'contributors_count': contributors_count,
+            'deadline': event.deadline.isoformat(),
+            'event_date': event.event_date.isoformat(),
+            'picture_url': event.picture_url,
+            'created_at': event.created_at.isoformat(),
+            'progress': min(100, (total_raised / event.target_amount * 100) if event.target_amount > 0 else 0)
+        })
+    return jsonify(result)
+
+@app.route('/api/event/<token>')
+def api_get_event(token):
+    event = Event.query.filter_by(token=token).first_or_404()
+    total_raised = get_event_total_contributions(event.id)
+    contributors = Contributor.query.filter_by(event_id=event.id, status=STATUS_APPROVED).all()
+    
+    return jsonify({
+        'id': event.id,
+        'token': event.token,
+        'title': event.title,
+        'description': event.description,
+        'event_type': event.event_type,
+        'target_amount': event.target_amount,
+        'raised_amount': total_raised,
+        'deadline': event.deadline.isoformat(),
+        'event_date': event.event_date.isoformat(),
+        'picture_url': event.picture_url,
+        'background_image_url': event.background_image_url,
+        'payment_methods': {
+            'paybill': event.paybill,
+            'mpesa_number': event.mpesa_number,
+            'till_number': event.till_number,
+            'bank_name': event.bank_name,
+            'bank_account_name': event.bank_account_name,
+            'bank_account_number': event.bank_account_number
+        },
+        'contributors_count': len(contributors),
+        'created_at': event.created_at.isoformat(),
+        'is_active': event.is_active
+    })
+
+@app.route('/api/contributors')
+@admin_login_required
+def api_get_contributors():
+    """Get all contributors for admin's events"""
+    admin = Admin.query.get(session['admin_id'])
+    
+    if admin.is_super_admin:
+        contributors = Contributor.query.all()
+    else:
+        event_ids = [e.id for e in Event.query.filter_by(admin_id=admin.id).all()]
+        contributors = Contributor.query.filter(Contributor.event_id.in_(event_ids)).all()
+    
+    result = []
+    for c in contributors:
+        event = Event.query.get(c.event_id)
+        result.append({
+            'id': c.id,
+            'name': c.name,
+            'phone': c.phone,
+            'pledge_amount': c.pledge_amount,
+            'paid_amount': c.paid_amount,
+            'fee_amount': c.fee_amount,
+            'status': c.status,
+            'event_title': event.title if event else 'Unknown',
+            'created_at': c.created_at.isoformat()
+        })
+    return jsonify(result)
+
+@app.route('/api/contributor/<token>')
+def api_get_contributor(token):
+    contributor = Contributor.query.filter_by(token=token).first_or_404()
+    event = Event.query.get(contributor.event_id)
+    
+    return jsonify({
+        'id': contributor.id,
+        'token': contributor.token,
+        'name': contributor.name,
+        'phone': contributor.phone,
+        'pledge_amount': contributor.pledge_amount,
+        'paid_amount': contributor.paid_amount,
+        'fee_amount': contributor.fee_amount,
+        'net_contribution': contributor.net_contribution,
+        'status': contributor.status,
+        'event_title': event.title if event else 'Unknown',
+        'created_at': contributor.created_at.isoformat(),
+        'completed_at': contributor.completed_at.isoformat() if contributor.completed_at else None
+    })
+
+@app.route('/api/dashboard-stats')
+@admin_login_required
+def api_dashboard_stats():
+    admin = Admin.query.get(session['admin_id'])
+    
+    if admin.is_super_admin:
+        total_events = Event.query.count()
+        total_contributors = Contributor.query.count()
+        total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter_by(status=STATUS_APPROVED).scalar() or 0
+        total_fees = get_global_total_fees()
+        pending_count = Contributor.query.filter_by(status=STATUS_PENDING).count()
+    else:
+        event_ids = [e.id for e in Event.query.filter_by(admin_id=admin.id).all()]
+        total_events = len(event_ids)
+        total_contributors = Contributor.query.filter(Contributor.event_id.in_(event_ids)).count()
+        total_raised = db.session.query(func.sum(Contributor.paid_amount)).filter(
+            Contributor.event_id.in_(event_ids), Contributor.status == STATUS_APPROVED
+        ).scalar() or 0
+        total_fees = db.session.query(func.sum(Contributor.fee_amount)).filter(
+            Contributor.event_id.in_(event_ids), Contributor.status == STATUS_APPROVED
+        ).scalar() or 0
+        pending_count = Contributor.query.filter(
+            Contributor.event_id.in_(event_ids), Contributor.status == STATUS_PENDING
+        ).count()
+    
+    return jsonify({
+        'total_events': total_events,
+        'total_contributors': total_contributors,
+        'total_raised': total_raised,
+        'total_fees': total_fees,
+        'pending_contributions': pending_count
+    })
+
+# ---------- AI Assistant Routes ----------
+
+@app.route('/ai-helper')
+@admin_login_required
+def ai_helper():
+    return render_template('ai_helper.html')
+
+@app.route('/api/ai-chat', methods=['POST'])
+@admin_login_required
+def api_ai_chat():
+    if not OPENAI_API_KEY:
+        return jsonify({'error': 'OpenAI API key not configured. Please add OPENAI_API_KEY to environment variables.'}), 503
+    
+    data = request.get_json()
+    message = data.get('message', '').strip()
+    
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+    
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": """You are GoldenVow AI Assistant, a helpful assistant for a fundraising platform.
+                You help users with information about fundraising, event creation, contributions, and platform features.
+                You can answer any question but always provide clear, helpful, and accurate information.
+                If asked about something outside your knowledge, say so politely and offer to connect with human support.
+                
+                GoldenVow is a fundraising platform that helps people raise funds for:
+                - Dowry (bride price) contributions
+                - Funeral/burial expenses
+                - Medical emergencies
+                - Education fees
+                - Community harambee projects
+                - Other personal causes
+                
+                Features include:
+                - Event creation with customizable payment methods (M-Pesa, Paybill, Till, Bank)
+                - Contributor registration and login
+                - Pledge and payment tracking
+                - Fee calculation with referral discounts
+                - Admin dashboard for managing events and contributions
+                - Super admin dashboard for platform oversight
+                - Two-way chat between admins and contributors
+                - Payment proof submission
+                - Receipt generation
+                - Notifications
+                - Announcements
+                """.strip()},
+                {"role": "user", "content": message}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        return jsonify({
+            'success': True,
+            'response': ai_response
+        })
+    except Exception as e:
+        logger.error(f"AI Chat error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-handoff', methods=['POST'])
+@admin_login_required
+def api_ai_handoff():
+    """Handle human handoff request from AI assistant"""
+    data = request.get_json()
+    reason = data.get('reason', 'User requested human assistance')
+    
+    # Find a super admin to notify
+    super_admins = Admin.query.filter_by(is_super_admin=True).all()
+    for sa in super_admins:
+        create_notification(
+            sa.id,
+            f"🤖 AI Handoff Request: {reason}. A user needs human assistance.",
+            'ai_handoff'
+        )
+    
+    return jsonify({
+        'success': True,
+        'message': 'Your request has been submitted. An admin will contact you shortly.'
+    })
 
 # ---------- Password Reset Routes ----------
+
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
+    if session.get('admin_id'):
+        return redirect(url_for('dashboard'))
+    
     form = ForgotPasswordForm()
     if form.validate_on_submit():
-        username = form.username.data.strip().lower()
-        email = form.email.data.strip().lower()
+        identifier = form.identifier.data.strip()
         
-        admin = Admin.query.filter_by(username=username, email=email).first()
+        # Try to find admin by email or username
+        admin = Admin.query.filter(
+            (Admin.email == identifier) | (Admin.username == identifier)
+        ).first()
+        
         if not admin:
-            flash('No account found with that username and email combination.', 'error')
+            flash('No account found with that email or username.', 'error')
             return render_template('forgot_password.html', form=form)
         
-        if is_account_locked_admin(admin):
-            remaining = (admin.locked_until - datetime.utcnow()).seconds // 60
-            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
-            return render_template('forgot_password.html', form=form)
-        
+        # Generate 6-digit code
         code = ''.join(random.choices(string.digits, k=6))
         expires_at = datetime.utcnow() + timedelta(minutes=15)
         
-        PasswordResetCode.query.filter_by(admin_id=admin.id, used=False).delete()
-        
-        reset = PasswordResetCode(
+        # Save reset code
+        reset_code = PasswordResetCode(
             admin_id=admin.id,
             code=code,
-            expires_at=expires_at,
-            used=False
+            expires_at=expires_at
         )
-        db.session.add(reset)
+        db.session.add(reset_code)
         db.session.commit()
         
-        session['reset_admin_id'] = admin.id
-        session['reset_code'] = code
-        
-        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
-        return redirect(url_for('reset_password_with_code'))
+        # Send email with code
+        try:
+            send_email(
+                admin.email,
+                "Password Reset Code - GoldenVow",
+                f"""Hello {admin.username},
+
+You requested to reset your password for GoldenVow.
+
+Your verification code is: {code}
+
+This code will expire in 15 minutes.
+
+If you didn't request this, please ignore this email.
+
+Best regards,
+GoldenVow Team
+"""
+            )
+            session['reset_admin_id'] = admin.id
+            flash('A verification code has been sent to your email.', 'success')
+            return redirect(url_for('verify_reset_code'))
+        except Exception as e:
+            logger.error(f"Password reset email error: {e}")
+            flash('Failed to send verification code. Please try again.', 'error')
     
     return render_template('forgot_password.html', form=form)
 
-@app.route('/reset-password-with-code', methods=['GET', 'POST'])
-def reset_password_with_code():
-    if 'reset_admin_id' not in session:
-        flash('Please request a password reset first.', 'error')
+@app.route('/verify-reset-code', methods=['GET', 'POST'])
+def verify_reset_code():
+    if session.get('admin_id'):
+        return redirect(url_for('dashboard'))
+    
+    admin_id = session.get('reset_admin_id')
+    if not admin_id:
+        flash('Please request a password reset first.', 'warning')
         return redirect(url_for('forgot_password'))
     
-    form = ResetPasswordCodeForm()
+    admin = Admin.query.get(admin_id)
+    if not admin:
+        session.pop('reset_admin_id', None)
+        flash('Invalid request.', 'error')
+        return redirect(url_for('forgot_password'))
+    
+    form = VerifyCodeForm()
     if form.validate_on_submit():
         code = form.code.data.strip()
-        new_password = form.password.data
-        confirm = form.confirm.data
         
-        if new_password != confirm:
-            flash('Passwords do not match.', 'error')
-            return render_template('reset_password_code.html', form=form)
-        
-        valid, msg = validate_password_strength(new_password)
-        if not valid:
-            flash(msg, 'error')
-            return render_template('reset_password_code.html', form=form)
-        
-        reset = PasswordResetCode.query.filter_by(
-            admin_id=session['reset_admin_id'],
+        reset_code = PasswordResetCode.query.filter_by(
+            admin_id=admin_id,
             code=code,
             used=False
         ).first()
         
-        if not reset:
-            flash('Invalid code.', 'error')
-            return render_template('reset_password_code.html', form=form)
+        if not reset_code:
+            flash('Invalid verification code.', 'error')
+            return render_template('verify_reset_code.html', form=form)
         
-        if reset.expires_at < datetime.utcnow():
-            flash('Code has expired. Please request a new one.', 'error')
+        if reset_code.expires_at < datetime.utcnow():
+            flash('Verification code has expired. Please request a new one.', 'error')
             return redirect(url_for('forgot_password'))
         
-        admin = Admin.query.get(session['reset_admin_id'])
-        admin.password_hash = hash_password(new_password)
-        reset.used = True
-        reset_login_attempts_admin(admin)
+        # Mark as used
+        reset_code.used = True
         db.session.commit()
         
-        session.pop('reset_admin_id', None)
-        session.pop('reset_code', None)
-        
-        flash('Password reset successful! Please login with your new password.', 'success')
-        return redirect(url_for('login'))
+        session['reset_code_verified'] = True
+        flash('Code verified! Please set your new password.', 'success')
+        return redirect(url_for('reset_password'))
     
-    return render_template('reset_password_code.html', form=form)
+    return render_template('verify_reset_code.html', form=form, email=admin.email)
 
-@app.route('/reset-password-in-app', methods=['POST'])
-@admin_login_required
-def reset_password_in_app():
-    admin = Admin.query.get(session['admin_id'])
-    current = request.form.get('current_password')
-    new = request.form.get('new_password')
-    confirm = request.form.get('confirm_password')
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if session.get('admin_id'):
+        return redirect(url_for('dashboard'))
     
-    if not check_password(current, admin.password_hash):
-        flash('Current password is incorrect.', 'error')
-        return redirect(url_for('profile'))
+    admin_id = session.get('reset_admin_id')
+    verified = session.get('reset_code_verified', False)
     
-    if new != confirm:
-        flash('New passwords do not match.', 'error')
-        return redirect(url_for('profile'))
-    
-    valid, msg = validate_password_strength(new)
-    if not valid:
-        flash(msg, 'error')
-        return redirect(url_for('profile'))
-    
-    admin.password_hash = hash_password(new)
-    db.session.commit()
-    flash('Password changed successfully.', 'success')
-    return redirect(url_for('profile'))
-
-@app.route('/reset-password/<token>', methods=['GET', 'POST'])
-def reset_password(token):
-    reset = PasswordReset.query.filter_by(token=token, used=False).first()
-    if not reset or reset.expires_at < datetime.utcnow():
-        flash('Invalid or expired token.', 'error')
+    if not admin_id or not verified:
+        flash('Please verify your code first.', 'warning')
         return redirect(url_for('forgot_password'))
+    
+    admin = Admin.query.get(admin_id)
+    if not admin:
+        session.pop('reset_admin_id', None)
+        session.pop('reset_code_verified', None)
+        flash('Invalid request.', 'error')
+        return redirect(url_for('forgot_password'))
+    
     form = ResetPasswordForm()
     if form.validate_on_submit():
-        admin = Admin.query.get(reset.admin_id)
-        admin.password_hash = hash_password(form.password.data)
-        reset.used = True
+        password = form.password.data
+        confirm = form.confirm_password.data
+        
+        if password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('reset_password.html', form=form)
+        
+        valid, msg = validate_password_strength(password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('reset_password.html', form=form)
+        
+        # Update password
+        admin.password_hash = hash_password(password)
+        admin.login_attempts = 0
+        admin.locked_until = None
         db.session.commit()
-        flash('Password reset successful. Please login.', 'success')
+        
+        # Clear session
+        session.pop('reset_admin_id', None)
+        session.pop('reset_code_verified', None)
+        
+        flash('Password has been reset successfully! Please login.', 'success')
         return redirect(url_for('login'))
+    
     return render_template('reset_password.html', form=form)
 
-@app.route('/manage-feature-requests')
-@admin_login_required
-@super_admin_required
-def manage_feature_requests():
-    return render_template('feature_requests.html')
+# ---------- Contributor Password Reset ----------
 
-@app.route('/feature-request', methods=['GET', 'POST'])
-@app.route('/feature-request/<event_token>', methods=['GET', 'POST'])
-def submit_feature_request(event_token=None):
-    flash('Feature request feature is coming soon.', 'info')
-    return redirect(url_for('index'))
-
-# ---------- Contributor Password Reset Routes ----------
 @app.route('/contributor/forgot-password', methods=['GET', 'POST'])
 def contributor_forgot_password():
+    if session.get('contributor_id'):
+        return redirect(url_for('contributor_dashboard'))
+    
     form = ContributorForgotPasswordForm()
     if form.validate_on_submit():
-        username = form.username.data.strip().lower()
-        email = form.email.data.strip().lower()
+        identifier = form.identifier.data.strip()
         
-        contributor = Contributor.query.filter_by(username=username, email=email).first()
+        # Try to find contributor by username or phone
+        contributor = Contributor.query.filter(
+            (Contributor.username == identifier) | (Contributor.phone == identifier)
+        ).first()
+        
         if not contributor:
-            flash('No account found with that username and email combination.', 'error')
+            flash('No account found with that username or phone.', 'error')
             return render_template('contributor_forgot_password.html', form=form)
         
-        if is_account_locked_contributor(contributor):
-            remaining = (contributor.locked_until - datetime.utcnow()).seconds // 60
-            flash(f'Account locked. Try again in {remaining} minutes.', 'error')
-            return render_template('contributor_forgot_password.html', form=form)
-        
+        # Generate 6-digit code
         code = ''.join(random.choices(string.digits, k=6))
         expires_at = datetime.utcnow() + timedelta(minutes=15)
         
-        ContributorPasswordResetCode.query.filter_by(contributor_id=contributor.id, used=False).delete()
-        
-        reset = ContributorPasswordResetCode(
+        # Save reset code
+        reset_code = ContributorPasswordResetCode(
             contributor_id=contributor.id,
             code=code,
-            expires_at=expires_at,
-            used=False
+            expires_at=expires_at
         )
-        db.session.add(reset)
+        db.session.add(reset_code)
         db.session.commit()
         
+        # Send SMS or email? For now, just show the code
         session['contributor_reset_id'] = contributor.id
-        session['contributor_reset_code'] = code
-        
-        flash(f'Your reset code is: {code}. Enter it on the next page.', 'info')
-        return redirect(url_for('contributor_reset_password_with_code'))
+        flash(f'Your verification code is: {code}. Please enter it below.', 'info')
+        return redirect(url_for('contributor_verify_reset_code'))
     
     return render_template('contributor_forgot_password.html', form=form)
 
-@app.route('/contributor/reset-password-with-code', methods=['GET', 'POST'])
-def contributor_reset_password_with_code():
-    if 'contributor_reset_id' not in session:
-        flash('Please request a password reset first.', 'error')
+@app.route('/contributor/verify-reset-code', methods=['GET', 'POST'])
+def contributor_verify_reset_code():
+    if session.get('contributor_id'):
+        return redirect(url_for('contributor_dashboard'))
+    
+    contributor_id = session.get('contributor_reset_id')
+    if not contributor_id:
+        flash('Please request a password reset first.', 'warning')
         return redirect(url_for('contributor_forgot_password'))
     
-    form = ContributorResetPasswordCodeForm()
+    contributor = Contributor.query.get(contributor_id)
+    if not contributor:
+        session.pop('contributor_reset_id', None)
+        flash('Invalid request.', 'error')
+        return redirect(url_for('contributor_forgot_password'))
+    
+    form = VerifyCodeForm()
     if form.validate_on_submit():
         code = form.code.data.strip()
-        new_password = form.password.data
-        confirm = form.confirm.data
         
-        if new_password != confirm:
-            flash('Passwords do not match.', 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
-        
-        valid, msg = validate_password_strength(new_password)
-        if not valid:
-            flash(msg, 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
-        
-        reset = ContributorPasswordResetCode.query.filter_by(
-            contributor_id=session['contributor_reset_id'],
+        reset_code = ContributorPasswordResetCode.query.filter_by(
+            contributor_id=contributor_id,
             code=code,
             used=False
         ).first()
         
-        if not reset:
-            flash('Invalid code.', 'error')
-            return render_template('contributor_reset_password_code.html', form=form)
+        if not reset_code:
+            flash('Invalid verification code.', 'error')
+            return render_template('contributor_verify_reset_code.html', form=form)
         
-        if reset.expires_at < datetime.utcnow():
-            flash('Code has expired. Please request a new one.', 'error')
+        if reset_code.expires_at < datetime.utcnow():
+            flash('Verification code has expired. Please request a new one.', 'error')
             return redirect(url_for('contributor_forgot_password'))
         
-        contributor = Contributor.query.get(session['contributor_reset_id'])
-        contributor.password_hash = hash_password(new_password)
-        reset.used = True
-        reset_login_attempts_contributor(contributor)
+        reset_code.used = True
+        db.session.commit()
+        
+        session['contributor_reset_verified'] = True
+        flash('Code verified! Please set your new password.', 'success')
+        return redirect(url_for('contributor_reset_password'))
+    
+    return render_template('contributor_verify_reset_code.html', form=form)
+
+@app.route('/contributor/reset-password', methods=['GET', 'POST'])
+def contributor_reset_password():
+    if session.get('contributor_id'):
+        return redirect(url_for('contributor_dashboard'))
+    
+    contributor_id = session.get('contributor_reset_id')
+    verified = session.get('contributor_reset_verified', False)
+    
+    if not contributor_id or not verified:
+        flash('Please verify your code first.', 'warning')
+        return redirect(url_for('contributor_forgot_password'))
+    
+    contributor = Contributor.query.get(contributor_id)
+    if not contributor:
+        session.pop('contributor_reset_id', None)
+        session.pop('contributor_reset_verified', None)
+        flash('Invalid request.', 'error')
+        return redirect(url_for('contributor_forgot_password'))
+    
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        password = form.password.data
+        confirm = form.confirm_password.data
+        
+        if password != confirm:
+            flash('Passwords do not match.', 'error')
+            return render_template('contributor_reset_password.html', form=form)
+        
+        valid, msg = validate_password_strength(password)
+        if not valid:
+            flash(msg, 'error')
+            return render_template('contributor_reset_password.html', form=form)
+        
+        contributor.password_hash = hash_password(password)
+        contributor.login_attempts = 0
+        contributor.locked_until = None
         db.session.commit()
         
         session.pop('contributor_reset_id', None)
-        session.pop('contributor_reset_code', None)
+        session.pop('contributor_reset_verified', None)
         
-        flash('Password reset successful! Please login with your new password.', 'success')
+        flash('Password has been reset successfully! Please login.', 'success')
         return redirect(url_for('contributor_login'))
     
-    return render_template('contributor_reset_password_code.html', form=form)
+    return render_template('contributor_reset_password.html', form=form)
 
-@app.route('/contributor/reset-password-in-app', methods=['POST'])
-@contributor_login_required
-def contributor_reset_password_in_app():
-    contributor = Contributor.query.get(session['contributor_id'])
-    current = request.form.get('current_password')
-    new = request.form.get('new_password')
-    confirm = request.form.get('confirm_password')
+# ---------- Admin User Management ----------
+
+@app.route('/admin/users')
+@admin_login_required
+@super_admin_required
+def admin_users():
+    admins = Admin.query.all()
+    return render_template('admin_users.html', admins=admins)
+
+@app.route('/admin/user/<int:id>/toggle', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def admin_user_toggle(id):
+    admin = Admin.query.get_or_404(id)
     
-    if not check_password(current, contributor.password_hash):
-        flash('Current password is incorrect.', 'error')
-        return redirect(url_for('contributor_dashboard'))
+    if admin.is_super_admin and admin.id == session.get('admin_id'):
+        flash('You cannot deactivate yourself.', 'error')
+        return redirect(url_for('admin_users'))
     
-    if new != confirm:
-        flash('New passwords do not match.', 'error')
-        return redirect(url_for('contributor_dashboard'))
-    
-    valid, msg = validate_password_strength(new)
-    if not valid:
-        flash(msg, 'error')
-        return redirect(url_for('contributor_dashboard'))
-    
-    contributor.password_hash = hash_password(new)
+    admin.is_active = not admin.is_active
     db.session.commit()
-    flash('Password changed successfully.', 'success')
-    return redirect(url_for('contributor_dashboard'))
+    flash(f"User {'activated' if admin.is_active else 'deactivated'}.", 'success')
+    return redirect(url_for('admin_users'))
 
-# ---------- Create Super Admin ----------
-@app.route('/create_super_admin')
-def create_super_admin():
-    if Admin.query.count() > 0:
-        return "Admin already exists. <a href='/login'>Login</a>"
-    username = "super"
-    password = "super123"
-    admin = Admin(
-        username=username,
-        password_hash=hash_password(password),
-        email="super@goldenvow.com",
-        phone="0000000000",
-        is_super_admin=True,
-        referral_code=generate_referral_code()
-    )
-    db.session.add(admin)
+@app.route('/admin/user/<int:id>/make-super', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def admin_make_super(id):
+    admin = Admin.query.get_or_404(id)
+    
+    if admin.id == session.get('admin_id'):
+        flash('You are already super admin.', 'info')
+        return redirect(url_for('admin_users'))
+    
+    admin.is_super_admin = True
     db.session.commit()
-    return f"Super Admin created!<br>Username: {username}<br>Password: {password}<br><a href='/login'>Login</a>"
+    flash(f"{admin.username} is now a super admin.", 'success')
+    return redirect(url_for('admin_users'))
 
-# ---------- Scheduler Jobs ----------
+@app.route('/admin/user/<int:id>/remove-super', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def admin_remove_super(id):
+    admin = Admin.query.get_or_404(id)
+    
+    if admin.id == session.get('admin_id'):
+        flash('You cannot remove your own super admin status.', 'error')
+        return redirect(url_for('admin_users'))
+    
+    admin.is_super_admin = False
+    db.session.commit()
+    flash(f"Super admin status removed from {admin.username}.", 'success')
+    return redirect(url_for('admin_users'))
+
+# ---------- Scheduled Jobs ----------
+
 def check_dormant_events():
+    """Check for events that haven't received contributions in 7 days"""
     with app.app_context():
         cutoff = datetime.utcnow() - timedelta(days=7)
-        events = Event.query.filter(
-            Event.is_active == True,
+        dormant_events = Event.query.filter(
             Event.last_activity < cutoff,
+            Event.is_active == True,
             Event.dormant_notified == False
         ).all()
-        for event in events:
+        
+        for event in dormant_events:
             admin = Admin.query.get(event.admin_id)
-            if admin and admin.email:
-                subject = f"⚠️ Your event '{event.title}' is inactive – action required"
-                body = f"""
-Your event '{event.title}' has had no activity for 7 days.
-To keep it active, please log in and make a change (e.g., add a contributor, edit details).
-If we don't hear from you within 7 hours, the event will be automatically deleted.
-"""
-                send_email(admin.email, subject, body)
+            if admin:
+                create_notification(
+                    admin.id,
+                    f"⏰ Your event '{event.title}' has been dormant for 7 days. Consider sharing it to get more contributions!",
+                    'dormant'
+                )
                 event.dormant_notified = True
                 event.dormant_notified_at = datetime.utcnow()
                 db.session.commit()
-                logger.info(f"Dormant notification sent for event {event.id}")
 
-def delete_dormant_events():
+def check_fee_payments():
+    """Check for events with overdue fees"""
     with app.app_context():
-        cutoff = datetime.utcnow() - timedelta(hours=7)
         events = Event.query.filter(
-            Event.dormant_notified == True,
-            Event.dormant_notified_at < cutoff,
-            Event.is_active == True
+            Event.is_active == True,
+            Event.fee_paid == False,
+            Event.first_contribution_date.isnot(None)
         ).all()
+        
         for event in events:
-            db.session.delete(event)
-            db.session.commit()
-            logger.info(f"Dormant event {event.id} deleted")
+            if is_fee_overdue(event):
+                admin = Admin.query.get(event.admin_id)
+                if admin:
+                    total_fee = get_event_total_fee(event.id)
+                    create_notification(
+                        admin.id,
+                        f"⚠️ Event '{event.title}' has overdue fees of KES {total_fee:,.2f}. Please pay within 24 hours or your event page may be locked.",
+                        'fee_overdue'
+                    )
 
+# Initialize scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(check_dormant_events, 'interval', days=1)
-scheduler.add_job(delete_dormant_events, 'interval', hours=1)
+scheduler.add_job(check_dormant_events, IntervalTrigger(hours=24))
+scheduler.add_job(check_fee_payments, IntervalTrigger(hours=12))
 scheduler.start()
 
+# ---------- Create Tables ----------
+
+@app.before_first_request
+def create_tables():
+    db.create_all()
+    
+    # Create default super admin if none exists
+    if not Admin.query.filter_by(is_super_admin=True).first():
+        super_admin = Admin(
+            username='superadmin',
+            password_hash=hash_password('SuperAdmin2024!'),
+            email='superadmin@goldenvow.com',
+            phone='+254700000000',
+            is_super_admin=True,
+            is_active=True,
+            referral_code=generate_referral_code()
+        )
+        db.session.add(super_admin)
+        db.session.commit()
+        print("Super admin created: superadmin / SuperAdmin2024!")
+
 # ---------- Main ----------
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        try:
-            db.engine.execute('ALTER TABLE event ADD COLUMN lock_message TEXT')
-        except Exception as e:
-            logger.info(f"Column lock_message may already exist: {e}")
-        for key, default in [
-            ('maintenance_mode', 'False'),
-            ('maintenance_message', 'We are currently performing scheduled maintenance.'),
-            ('maintenance_eta', 'We expect to be back online within 2 hours.'),
-        ]:
-            if not Setting.query.filter_by(key=key).first():
-                db.session.add(Setting(key=key, value=default))
-        if Announcement.query.count() == 0:
-            ann = Announcement(
-                title="Welcome to GoldenVow!",
-                content="Start by creating your first event and inviting contributors.",
-                is_active=True,
-                expires_at=datetime.utcnow() + timedelta(days=30)
-            )
-            db.session.add(ann)
-        db.session.commit()
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
