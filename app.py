@@ -315,11 +315,11 @@ class ChatConversation(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (Index('idx_chat_conversation_admin', 'admin_id'), Index('idx_chat_conversation_contributor', 'contributor_id'),)
 
-class SupportMessage(db.Model):
-    __tablename__ = 'support_message'  # Renamed to avoid conflict with existing ChatMessage
+class SupportMessage(db.Model):  # RENAMED to avoid conflict
+    __tablename__ = 'support_message'
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey('chat_conversation.id', ondelete='CASCADE'))
-    sender_type = db.Column(db.String(20), nullable=False)  # 'admin' or 'contributor'
+    sender_type = db.Column(db.String(20), nullable=False)
     sender_id = db.Column(db.Integer, nullable=False)
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False)
