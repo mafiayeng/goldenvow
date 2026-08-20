@@ -48,21 +48,19 @@ if not app.secret_key:
     app.secret_key = 'dev-secret-key-change-in-production'
 
 # ============================================
-# NEON POSTGRESQL CONFIGURATION
+# NEON POSTGRESQL CONFIGURATION - CORRECTED
 # ============================================
-# IMPORTANT: Replace YOUR_PASSWORD with your actual Neon password
-# Click "Show password" in Neon dashboard to get it
-NEON_DATABASE_URL = "postgresql://neondb_owner:YOUR_PASSWORD_HERE@ep-old-king-axq0rhqu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+NEON_DATABASE_URL = "postgresql://neondb_owner:npg_LDkC0sprn3yc@ep-old-king-axq0rhqu-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
 # Use Neon
 app.config['SQLALCHEMY_DATABASE_URI'] = NEON_DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-print("=" * 50)
+print("=" * 60)
 print("✅ Connected to Neon PostgreSQL")
-print("📦 Database: neondb")
-print("🌐 Host: ep-old-king-axq0rhqu-pooler.us-east-2.aws.neon.tech")
-print("=" * 50)
+print(f"📦 Database: neondb")
+print(f"🌐 Host: ep-old-king-axq0rhqu-pooler.c-4.us-east-2.aws.neon.tech")
+print("=" * 60)
 # ============================================
 
 app.permanent_session_lifetime = timedelta(days=7)
@@ -1021,7 +1019,7 @@ def super_withdraw_request():
     flash(f'Withdrawal request of KES {amount:,.2f} submitted successfully.', 'success')
     return redirect(url_for('super_dashboard'))
 
-# ---------- Continue with remaining routes ----------
+# ---------- Event Routes ----------
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
 def create_event():
@@ -1263,6 +1261,7 @@ def add_contributor(token):
     flash('Contributors must register themselves via the event link.', 'info')
     return redirect(url_for('manage_contributors', token=token))
 
+# ---------- Contributor Routes ----------
 @app.route('/contributor/<token>')
 def contributor_view(token):
     contrib = Contributor.query.filter_by(token=token).first_or_404()
@@ -1501,6 +1500,7 @@ def contributor_dashboard():
     ).order_by(desc(Announcement.created_at)).all()
     return render_template('contributor_dashboard.html', contrib=contrib, contributions=contributions, announcements=announcements)
 
+# ---------- Contact Routes ----------
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
     form = ContactForm()
@@ -1561,6 +1561,7 @@ def forward_contact(mid):
     flash(f'Message forwarded to {admin.username} via in-app notification.', 'success')
     return redirect(url_for('contact_messages'))
 
+# ---------- Profile & Settings Routes ----------
 @app.route('/profile', methods=['GET', 'POST'])
 @admin_login_required
 def profile():
@@ -1639,6 +1640,7 @@ def settings():
     
     return render_template('settings.html', maintenance=maintenance, msg=msg, eta=eta)
 
+# ---------- Announcement Routes ----------
 @app.route('/announcements')
 @admin_login_required
 def announcements():
@@ -1724,6 +1726,7 @@ def admin_chats():
         conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
     return render_template('admin_chats.html', conversations=conversations, admin=admin)
 
+# ---------- API Routes ----------
 @app.route('/api/chat/conversations')
 @admin_login_required
 def api_get_conversations():
@@ -1856,6 +1859,7 @@ def admin_chat_view(conversation_id):
     db.session.commit()
     return render_template('admin_chat_view.html', conversation=conversation, messages=messages, contributor=contributor, admin=admin)
 
+# ---------- Contributor Chat Routes ----------
 @app.route('/contributor/chats')
 @contributor_login_required
 def contributor_chats():
@@ -2390,12 +2394,12 @@ with app.app_context():
         )
         db.session.add(super_admin)
         db.session.commit()
-        print("=" * 50)
+        print("=" * 60)
         print("✅ Super admin created!")
         print("👤 Username: superadmin")
         print("🔑 Password: SuperAdmin2024!")
         print("📦 Database: Neon PostgreSQL (neondb)")
-        print("=" * 50)
+        print("=" * 60)
 
 # ---------- Main ----------
 if __name__ == '__main__':
