@@ -47,19 +47,36 @@ app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     app.secret_key = 'dev-secret-key-change-in-production'
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-    'DATABASE_URL', 'sqlite:///database.db'
-)
+# ============================================
+# NEON POSTGRESQL CONFIGURATION
+# ============================================
+# IMPORTANT: Replace YOUR_PASSWORD with your actual Neon password
+# Click "Show password" in Neon dashboard to get it
+NEON_DATABASE_URL = "postgresql://neondb_owner:YOUR_PASSWORD_HERE@ep-old-king-axq0rhqu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+# Use Neon
+app.config['SQLALCHEMY_DATABASE_URI'] = NEON_DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+print("=" * 50)
+print("✅ Connected to Neon PostgreSQL")
+print("📦 Database: neondb")
+print("🌐 Host: ep-old-king-axq0rhqu-pooler.us-east-2.aws.neon.tech")
+print("=" * 50)
+# ============================================
+
 app.permanent_session_lifetime = timedelta(days=7)
 
 csrf = CSRFProtect(app)
 db = SQLAlchemy(app)
 
+# ============================================
+# ENVIRONMENT VARIABLES
+# ============================================
 SERVICE_FEE_PERCENTAGE = float(os.environ.get('SERVICE_FEE_PERCENTAGE', 2.0))
 SUPPORT_WHATSAPP = os.environ.get('SUPPORT_WHATSAPP', '254737349468')
 SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'goldenvowsupport@gmail.com')
-SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET')
+SUPER_ADMIN_SECRET = os.environ.get('SUPER_ADMIN_SECRET', 'Admin2024!')
 MINIMUM_WITHDRAWAL_FEE = float(os.environ.get('MINIMUM_WITHDRAWAL_FEE', 50.0))
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -896,13 +913,11 @@ def super_dashboard():
         flash('An error occurred loading the super dashboard.', 'error')
         return redirect(url_for('dashboard'))
 
-# ---------- MISSING ROUTES ADDED ----------
-
+# ---------- Additional Routes ----------
 @app.route('/completed-events')
 @admin_login_required
 @super_admin_required
 def completed_events():
-    """View all completed events (target reached)"""
     try:
         all_events = Event.query.filter_by(is_active=True).all()
         completed_events_list = []
@@ -924,27 +939,22 @@ def completed_events():
 
 @app.route('/help')
 def help_page():
-    """Help/FAQ page"""
     return render_template('help.html')
 
 @app.route('/faq')
 def faq_page():
-    """FAQ page (alias for help)"""
     return redirect(url_for('help_page'))
 
 @app.route('/terms')
 def terms_page():
-    """Terms and Conditions page"""
     return render_template('terms.html')
 
 @app.route('/privacy')
 def privacy_page():
-    """Privacy Policy page"""
     return render_template('privacy.html')
 
 @app.route('/about')
 def about_page():
-    """About page"""
     return render_template('about.html')
 
 @app.route('/super/request-payment/<int:event_id>', methods=['POST'])
@@ -967,8 +977,51 @@ def request_payment_from_admin(event_id):
     flash(f'✅ Payment request sent to {admin.username} via in-app notification.', 'success')
     return redirect(url_for('completed_events'))
 
-# ---------- Continue with remaining routes ----------
+@app.route('/super/withdraw-request', methods=['POST'])
+@admin_login_required
+@super_admin_required
+def super_withdraw_request():
+    try:
+        amount = float(request.form.get('amount', 0))
+        phone = request.form.get('phone', '').strip()
+    except ValueError:
+        amount = 0
+    
+    if amount < MINIMUM_WITHDRAWAL_FEE:
+        flash(f'Minimum withdrawal is KES {MINIMUM_WITHDRAWAL_FEE:,.2f}.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    total_fees = get_global_total_fees()
+    if amount > total_fees:
+        flash(f'Insufficient fees available. Total fees: KES {total_fees:,.2f}', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    if not phone or len(phone) < 10:
+        flash('Please provide a valid phone number.', 'error')
+        return redirect(url_for('super_dashboard'))
+    
+    wd = Withdrawal(
+        admin_id=session['admin_id'],
+        amount=amount,
+        phone=phone,
+        method='mpesa',
+        status='pending'
+    )
+    db.session.add(wd)
+    db.session.commit()
+    
+    super_admins = Admin.query.filter_by(is_super_admin=True).all()
+    for sa in super_admins:
+        create_notification(
+            sa.id,
+            f"💰 New withdrawal request from {sa.username}: KES {amount:,.2f} to {phone}",
+            'withdrawal'
+        )
+    
+    flash(f'Withdrawal request of KES {amount:,.2f} submitted successfully.', 'success')
+    return redirect(url_for('super_dashboard'))
 
+# ---------- Continue with remaining routes ----------
 @app.route('/events/create', methods=['GET', 'POST'])
 @admin_login_required
 def create_event():
@@ -1661,6 +1714,16 @@ def chat():
     contributors = Contributor.query.filter(Contributor.event_id.in_(event_ids)).all()
     return render_template('chat.html', admin=admin, conversations=conversations, contributors=contributors)
 
+@app.route('/admin/chats')
+@admin_login_required
+def admin_chats():
+    admin = Admin.query.get(session['admin_id'])
+    if admin.is_super_admin:
+        conversations = ChatConversation.query.filter_by(is_active=True).order_by(desc(ChatConversation.updated_at)).all()
+    else:
+        conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
+    return render_template('admin_chats.html', conversations=conversations, admin=admin)
+
 @app.route('/api/chat/conversations')
 @admin_login_required
 def api_get_conversations():
@@ -1776,16 +1839,6 @@ def api_get_chat_contributors():
             'created_at': c.created_at.isoformat()
         })
     return jsonify(result)
-
-@app.route('/admin/chats')
-@admin_login_required
-def admin_chats():
-    admin = Admin.query.get(session['admin_id'])
-    if admin.is_super_admin:
-        conversations = ChatConversation.query.filter_by(is_active=True).order_by(desc(ChatConversation.updated_at)).all()
-    else:
-        conversations = ChatConversation.query.filter_by(admin_id=admin.id, is_active=True).order_by(desc(ChatConversation.updated_at)).all()
-    return render_template('admin_chats.html', conversations=conversations, admin=admin)
 
 @app.route('/admin/chat/<int:conversation_id>')
 @admin_login_required
@@ -2337,7 +2390,12 @@ with app.app_context():
         )
         db.session.add(super_admin)
         db.session.commit()
-        print("Super admin created: superadmin / SuperAdmin2024!")
+        print("=" * 50)
+        print("✅ Super admin created!")
+        print("👤 Username: superadmin")
+        print("🔑 Password: SuperAdmin2024!")
+        print("📦 Database: Neon PostgreSQL (neondb)")
+        print("=" * 50)
 
 # ---------- Main ----------
 if __name__ == '__main__':
